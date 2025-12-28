@@ -1689,9 +1689,7 @@ function Gatito:CreateWindow(cfg)
         Corner(popFrame, 12)
         Stroke(popFrame, Theme.Accent, 2)
         
-        local titleBar = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(1,0,0,40), ClipsDescendants = true, Parent = popFrame})
-        Corner(titleBar, 12)
-        Create("Frame", {BackgroundColor3 = Theme.Sidebar, Position = UDim2.new(0,0,0.5,0), Size = UDim2.new(1,0,0.5,0), Parent = titleBar})
+        local titleBar = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(1,0,0,40), ClipsDescendants = true, BorderSizePixel = 0, Parent = popFrame})
         
         Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(0,24,1,0), Font = Enum.Font.GothamBold, Text = tabData.Icon and tabData.Icon.Text or "📌", TextSize = 18, Parent = titleBar})
         Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,45,0,0), Size = UDim2.new(1,-100,1,0), Font = Enum.Font.GothamBold, Text = tabName, TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = titleBar})
@@ -1867,5 +1865,12 @@ function Gatito:CreateWindow(cfg)
     
     return Window
 end
+
+-- Support both loadstring and direct inclusion
+-- Usage 1: local Gatito = loadstring(game:HttpGet("url"))()
+-- Usage 2: loadstring(game:HttpGet("url"))() then use _G.Gatito
+-- Usage 3: Paste code directly, Gatito is available as local or _G.Gatito
+_G.Gatito = Gatito
+getgenv().Gatito = Gatito
 
 return Gatito
