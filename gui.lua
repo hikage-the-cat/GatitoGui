@@ -22,7 +22,7 @@ local RunService = game:GetService("RunService")
 
 local Player = Players.LocalPlayer
 
-local Theme = {
+local DefaultTheme = {
     Background = Color3.fromRGB(18, 18, 22),
     Sidebar = Color3.fromRGB(24, 24, 30),
     Card = Color3.fromRGB(30, 30, 38),
@@ -37,6 +37,24 @@ local Theme = {
     Error = Color3.fromRGB(200, 80, 80),
     Divider = Color3.fromRGB(45, 45, 55)
 }
+
+local Theme = {}
+for k, v in pairs(DefaultTheme) do Theme[k] = v end
+
+local CustomWidgets = {}
+
+function Gatito:RegisterWidget(name, builder)
+    CustomWidgets[name] = builder
+end
+
+function Gatito:SetDefaultTheme(themeTable)
+    for k, v in pairs(themeTable) do
+        if DefaultTheme[k] then
+            DefaultTheme[k] = v
+            Theme[k] = v
+        end
+    end
+end
 
 local function Create(class, props, children)
     local inst = Instance.new(class)
@@ -81,6 +99,8 @@ function Gatito:CreateWindow(cfg)
     local showTutorial = cfg.Tutorial ~= false
     local tutorialTips = cfg.TutorialTips or {}
     local tutorialConfigKey = configName .. "_tutorial_done"
+    local toggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift
+    local uiScale = cfg.UIScale or 1
     
     if CoreGui:FindFirstChild("GatitoLib") then
         CoreGui:FindFirstChild("GatitoLib"):Destroy()
@@ -90,6 +110,11 @@ function Gatito:CreateWindow(cfg)
     
     local Flags = {}
     local FlagCallbacks = {}
+    local Keybinds = {}
+    local VisibilityConditions = {}
+    local UpdateCallbacks = {}
+    local PopoutWindows = {}
+    local Elements = {}
     
     local function GetConfigPath()
         return configFolder .. "/" .. configName .. ".json"
@@ -181,6 +206,58 @@ function Gatito:CreateWindow(cfg)
     
     local tutorialActive = false
     local tutorialSkipped = false
+    
+    local function CheckVisibility(element, flag)
+        if not flag then return end
+        local condition = VisibilityConditions[flag]
+        if condition then
+            local show = false
+            if type(condition) == "function" then
+                show = condition()
+            elseif type(condition) == "string" and Flags[condition] then
+                show = Flags[condition]:Get()
+            elseif type(condition) == "boolean" then
+                show = condition
+            end
+            element.Visible = show
+        end
+    end
+    
+    local function RegisterVisibility(element, visibleIf)
+        if not visibleIf then return end
+        if type(visibleIf) == "string" then
+            VisibilityConditions[element] = visibleIf
+            local function update()
+                if Flags[visibleIf] then
+                    element.Visible = Flags[visibleIf]:Get()
+                end
+            end
+            FlagCallbacks[visibleIf] = FlagCallbacks[visibleIf] or {}
+            table.insert(FlagCallbacks[visibleIf], update)
+            update()
+        elseif type(visibleIf) == "function" then
+            VisibilityConditions[element] = visibleIf
+            element.Visible = visibleIf()
+        end
+    end
+    
+    local updateConnection
+    local function StartUpdateLoop()
+        if updateConnection then return end
+        updateConnection = RunService.Heartbeat:Connect(function(dt)
+            for _, callback in pairs(UpdateCallbacks) do
+                local ok, err = pcall(callback, dt)
+                if not ok then warn("[Gatito] Update error:", err) end
+            end
+        end)
+    end
+    
+    local function StopUpdateLoop()
+        if updateConnection then
+            updateConnection:Disconnect()
+            updateConnection = nil
+        end
+    end
     
     local Splash
     if showSplash then
@@ -968,6 +1045,14 @@ function Gatito:CreateWindow(cfg)
             btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = Theme.CardHover}, 0.15) end)
             btn.MouseLeave:Connect(function() Tween(btn, {BackgroundColor3 = Theme.Card}, 0.15) end)
             btn.MouseButton1Click:Connect(cfg.Callback or function() end)
+            
+            if cfg.VisibleIf then RegisterVisibility(btn, cfg.VisibleIf) end
+            if cfg.Keybind then
+                Window:BindKey(cfg.Keybind, cfg.Callback, cfg.Name)
+            end
+            
+            Elements[cfg.Name or "Button_" .. #Elements] = {Element = btn, Type = "Button", Config = cfg}
+            return btn
         end
         
         function Tab:Toggle(cfg)
@@ -988,6 +1073,9 @@ function Gatito:CreateWindow(cfg)
                 Tween(circle, {Position = enabled and UDim2.new(1,-22,0.5,0) or UDim2.new(0,4,0.5,0)}, 0.2)
                 if not skipCallback and cfg.Callback then cfg.Callback(enabled) end
                 if autoSave and flag then SaveConfig() end
+                if flag and FlagCallbacks[flag] then
+                    for _, cb in pairs(FlagCallbacks[flag]) do cb() end
+                end
             end
             
             btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = Theme.CardHover}, 0.15) end)
@@ -999,10 +1087,20 @@ function Gatito:CreateWindow(cfg)
             
             local obj = {
                 Set = function(_, v, skipCallback) enabled = v update(skipCallback) end,
-                Get = function() return enabled end
+                Get = function() return enabled end,
+                Element = btn
             }
             
             if flag then Flags[flag] = obj end
+            if cfg.VisibleIf then RegisterVisibility(btn, cfg.VisibleIf) end
+            if cfg.Keybind then
+                Window:BindKey(cfg.Keybind, function()
+                    enabled = not enabled
+                    update()
+                end, cfg.Name)
+            end
+            
+            Elements[cfg.Name or flag or "Toggle_" .. #Elements] = {Element = btn, Type = "Toggle", Config = cfg, Object = obj}
             return obj
         end
         
@@ -1072,10 +1170,14 @@ function Gatito:CreateWindow(cfg)
                     updateVisual()
                     if not skipCallback and cfg.Callback then cfg.Callback(val) end
                 end,
-                Get = function() return val end
+                Get = function() return val end,
+                Element = frame
             }
             
             if flag then Flags[flag] = obj end
+            if cfg.VisibleIf then RegisterVisibility(frame, cfg.VisibleIf) end
+            
+            Elements[cfg.Name or flag or "Slider_" .. #Elements] = {Element = frame, Type = "Slider", Config = cfg, Object = obj}
             return obj
         end
         
@@ -1129,10 +1231,37 @@ function Gatito:CreateWindow(cfg)
                     selText.Text = v
                     if not skipCallback and cfg.Callback then cfg.Callback(v) end
                 end,
-                Get = function() return selected end
+                Get = function() return selected end,
+                Element = frame,
+                Refresh = function(_, newOpts)
+                    for _, c in pairs(optFrame:GetChildren()) do
+                        if c:IsA("TextButton") then c:Destroy() end
+                    end
+                    opts = newOpts
+                    optFrame.Size = UDim2.new(1,-30,0,#opts*28+8)
+                    for _, opt in ipairs(opts) do
+                        local optBtn = Create("TextButton", {BackgroundColor3 = Theme.Card, BackgroundTransparency = 1, Size = UDim2.new(1,0,0,26), Text = "", AutoButtonColor = false, Parent = optFrame})
+                        Corner(optBtn, 4)
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,8,0,0), Size = UDim2.new(1,-16,1,0), Font = Enum.Font.Gotham, Text = opt, TextSize = 12, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = optBtn})
+                        optBtn.MouseEnter:Connect(function() Tween(optBtn, {BackgroundTransparency = 0}, 0.1) end)
+                        optBtn.MouseLeave:Connect(function() Tween(optBtn, {BackgroundTransparency = 1}, 0.1) end)
+                        optBtn.MouseButton1Click:Connect(function()
+                            selected = opt
+                            selText.Text = opt
+                            open = false
+                            Tween(frame, {Size = UDim2.new(1,0,0,70)}, 0.2)
+                            Tween(arrow, {Rotation = 0}, 0.2)
+                            if cfg.Callback then cfg.Callback(opt) end
+                            if autoSave and flag then SaveConfig() end
+                        end)
+                    end
+                end
             }
             
             if flag then Flags[flag] = obj end
+            if cfg.VisibleIf then RegisterVisibility(frame, cfg.VisibleIf) end
+            
+            Elements[cfg.Name or flag or "Dropdown_" .. #Elements] = {Element = frame, Type = "Dropdown", Config = cfg, Object = obj}
             return obj
         end
         
@@ -1154,10 +1283,14 @@ function Gatito:CreateWindow(cfg)
             
             local obj = {
                 Set = function(_,t) input.Text = t end,
-                Get = function() return input.Text end
+                Get = function() return input.Text end,
+                Element = frame
             }
             
             if flag then Flags[flag] = obj end
+            if cfg.VisibleIf then RegisterVisibility(frame, cfg.VisibleIf) end
+            
+            Elements[cfg.Name or flag or "Textbox_" .. #Elements] = {Element = frame, Type = "Textbox", Config = cfg, Object = obj}
             return obj
         end
         
@@ -1186,6 +1319,7 @@ function Gatito:CreateWindow(cfg)
                     keyBtn.Text = key.Name
                     listening = false
                     Tween(keyBtn, {BackgroundColor3 = Theme.Divider, TextColor3 = Theme.Accent}, 0.15)
+                    if cfg.OnChanged then cfg.OnChanged(key) end
                     if autoSave and flag then SaveConfig() end
                 elseif not gpe and i.KeyCode == key and cfg.Callback then
                     cfg.Callback()
@@ -1194,15 +1328,34 @@ function Gatito:CreateWindow(cfg)
             
             local obj = {
                 Set = function(_,k) key = k keyBtn.Text = key.Name end,
-                Get = function() return key end
+                Get = function() return key end,
+                Element = frame
             }
             
             if flag then Flags[flag] = obj end
+            if cfg.VisibleIf then RegisterVisibility(frame, cfg.VisibleIf) end
+            
+            Elements[cfg.Name or flag or "Keybind_" .. #Elements] = {Element = frame, Type = "Keybind", Config = cfg, Object = obj}
             return obj
         end
         
-        function Tab:Label(text)
-            Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Font = Enum.Font.Gotham, Text = text, TextSize = 13, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = page})
+        function Tab:Label(text, cfg)
+            cfg = cfg or {}
+            local label = Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Font = Enum.Font.Gotham, Text = text, TextSize = 13, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = page})
+            if cfg.VisibleIf then RegisterVisibility(label, cfg.VisibleIf) end
+            return label
+        end
+        
+        function Tab:Separator()
+            Create("Frame", {BackgroundColor3 = Theme.Divider, Size = UDim2.new(1,0,0,1), Parent = page})
+        end
+        
+        function Tab:Custom(widgetName, cfg)
+            if CustomWidgets[widgetName] then
+                return CustomWidgets[widgetName](Tab, cfg, page, Theme)
+            else
+                warn("[Gatito] Custom widget not found:", widgetName)
+            end
         end
         
         function Tab:SaveButton(cfg)
@@ -1318,11 +1471,358 @@ function Gatito:CreateWindow(cfg)
     end
     
     function Window:Destroy()
+        StopUpdateLoop()
+        for _, popout in pairs(PopoutWindows) do
+            if popout and popout.Parent then popout:Destroy() end
+        end
         Tween(Main, {Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
         task.delay(0.35, function()
             Gui:Destroy()
         end)
     end
+    
+    function Window:SetTheme(themeTable)
+        for k, v in pairs(themeTable) do
+            if Theme[k] then Theme[k] = v end
+        end
+        if autoSave then SaveConfig() end
+    end
+    
+    function Window:SetAccent(color)
+        Theme.Accent = color
+        Theme.AccentDark = Color3.new(color.R * 0.8, color.G * 0.8, color.B * 0.8)
+        if autoSave then SaveConfig() end
+    end
+    
+    function Window:BindKey(key, callback, name)
+        local id = name or tostring(key)
+        Keybinds[id] = {Key = key, Callback = callback, Name = name}
+        return {
+            Unbind = function() Keybinds[id] = nil end,
+            SetKey = function(_, newKey) Keybinds[id].Key = newKey end
+        }
+    end
+    
+    function Window:UnbindKey(name)
+        Keybinds[name] = nil
+    end
+    
+    function Window:OnUpdate(callback, name)
+        local id = name or #UpdateCallbacks + 1
+        UpdateCallbacks[id] = callback
+        StartUpdateLoop()
+        return {
+            Disconnect = function()
+                UpdateCallbacks[id] = nil
+                if next(UpdateCallbacks) == nil then StopUpdateLoop() end
+            end
+        }
+    end
+    
+    function Window:Confirm(cfg)
+        cfg = cfg or {}
+        local result = nil
+        
+        local overlay = Create("Frame", {BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 0.5, Size = UDim2.new(1,0,1,0), ZIndex = 200, Parent = Gui})
+        local modal = Create("Frame", {BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0,320,0,0), AutomaticSize = Enum.AutomaticSize.Y, ZIndex = 201, Parent = overlay})
+        Corner(modal, 12)
+        Stroke(modal, Theme.Accent, 2)
+        Padding(modal, 20)
+        Create("UIListLayout", {Padding = UDim.new(0,15), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = modal})
+        
+        if cfg.Icon then Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0,40,0,40), Font = Enum.Font.GothamBold, Text = cfg.Icon, TextSize = 32, ZIndex = 201, Parent = modal}) end
+        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Font = Enum.Font.GothamBold, Text = cfg.Title or "Confirm", TextSize = 18, TextColor3 = Theme.Text, ZIndex = 201, Parent = modal})
+        if cfg.Content then Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Font = Enum.Font.Gotham, Text = cfg.Content, TextSize = 13, TextColor3 = Theme.TextDim, TextWrapped = true, ZIndex = 201, Parent = modal}) end
+        
+        local btnFrame = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,36), ZIndex = 201, Parent = modal})
+        Create("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0,10), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = btnFrame})
+        
+        local cancelBtn = Create("TextButton", {BackgroundColor3 = Theme.Card, Size = UDim2.new(0,100,0,36), Font = Enum.Font.GothamMedium, Text = cfg.CancelText or "Cancel", TextSize = 13, TextColor3 = Theme.Text, AutoButtonColor = false, ZIndex = 201, Parent = btnFrame})
+        Corner(cancelBtn, 8)
+        local confirmBtn = Create("TextButton", {BackgroundColor3 = cfg.ConfirmColor or Theme.Accent, Size = UDim2.new(0,100,0,36), Font = Enum.Font.GothamMedium, Text = cfg.ConfirmText or "Confirm", TextSize = 13, TextColor3 = Theme.Text, AutoButtonColor = false, ZIndex = 201, Parent = btnFrame})
+        Corner(confirmBtn, 8)
+        
+        modal.Size = UDim2.new(0,0,0,0)
+        modal.BackgroundTransparency = 1
+        Tween(modal, {Size = UDim2.new(0,320,0,0), BackgroundTransparency = 0}, 0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        
+        local function close(confirmed)
+            result = confirmed
+            Tween(modal, {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}, 0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+            Tween(overlay, {BackgroundTransparency = 1}, 0.2)
+            task.delay(0.25, function() overlay:Destroy() end)
+            if cfg.Callback then cfg.Callback(confirmed) end
+        end
+        
+        cancelBtn.MouseEnter:Connect(function() Tween(cancelBtn, {BackgroundColor3 = Theme.CardHover}, 0.15) end)
+        cancelBtn.MouseLeave:Connect(function() Tween(cancelBtn, {BackgroundColor3 = Theme.Card}, 0.15) end)
+        confirmBtn.MouseEnter:Connect(function() Tween(confirmBtn, {BackgroundTransparency = 0.2}, 0.15) end)
+        confirmBtn.MouseLeave:Connect(function() Tween(confirmBtn, {BackgroundTransparency = 0}, 0.15) end)
+        
+        cancelBtn.MouseButton1Click:Connect(function() close(false) end)
+        confirmBtn.MouseButton1Click:Connect(function() close(true) end)
+        
+        return result
+    end
+    
+    function Window:Prompt(cfg)
+        cfg = cfg or {}
+        
+        local overlay = Create("Frame", {BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 0.5, Size = UDim2.new(1,0,1,0), ZIndex = 200, Parent = Gui})
+        local modal = Create("Frame", {BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0,350,0,0), AutomaticSize = Enum.AutomaticSize.Y, ZIndex = 201, Parent = overlay})
+        Corner(modal, 12)
+        Stroke(modal, Theme.Accent, 2)
+        Padding(modal, 20)
+        Create("UIListLayout", {Padding = UDim.new(0,12), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = modal})
+        
+        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Font = Enum.Font.GothamBold, Text = cfg.Title or "Input", TextSize = 18, TextColor3 = Theme.Text, ZIndex = 201, Parent = modal})
+        if cfg.Content then Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Font = Enum.Font.Gotham, Text = cfg.Content, TextSize = 13, TextColor3 = Theme.TextDim, TextWrapped = true, ZIndex = 201, Parent = modal}) end
+        
+        local inputFrame = Create("Frame", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,40), ZIndex = 201, Parent = modal})
+        Corner(inputFrame, 8)
+        local input = Create("TextBox", {BackgroundTransparency = 1, Position = UDim2.new(0,12,0,0), Size = UDim2.new(1,-24,1,0), Font = Enum.Font.Gotham, PlaceholderText = cfg.Placeholder or "Enter text...", PlaceholderColor3 = Theme.TextMuted, Text = cfg.Default or "", TextColor3 = Theme.Text, TextSize = 14, ClearTextOnFocus = false, ZIndex = 201, Parent = inputFrame})
+        
+        local btnFrame = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,36), ZIndex = 201, Parent = modal})
+        Create("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0,10), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = btnFrame})
+        
+        local cancelBtn = Create("TextButton", {BackgroundColor3 = Theme.Card, Size = UDim2.new(0,100,0,36), Font = Enum.Font.GothamMedium, Text = "Cancel", TextSize = 13, TextColor3 = Theme.Text, AutoButtonColor = false, ZIndex = 201, Parent = btnFrame})
+        Corner(cancelBtn, 8)
+        local confirmBtn = Create("TextButton", {BackgroundColor3 = Theme.Accent, Size = UDim2.new(0,100,0,36), Font = Enum.Font.GothamMedium, Text = "Submit", TextSize = 13, TextColor3 = Theme.Text, AutoButtonColor = false, ZIndex = 201, Parent = btnFrame})
+        Corner(confirmBtn, 8)
+        
+        modal.Size = UDim2.new(0,0,0,0)
+        modal.BackgroundTransparency = 1
+        Tween(modal, {Size = UDim2.new(0,350,0,0), BackgroundTransparency = 0}, 0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        
+        local function close(text)
+            Tween(modal, {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}, 0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+            Tween(overlay, {BackgroundTransparency = 1}, 0.2)
+            task.delay(0.25, function() overlay:Destroy() end)
+            if cfg.Callback then cfg.Callback(text) end
+        end
+        
+        cancelBtn.MouseEnter:Connect(function() Tween(cancelBtn, {BackgroundColor3 = Theme.CardHover}, 0.15) end)
+        cancelBtn.MouseLeave:Connect(function() Tween(cancelBtn, {BackgroundColor3 = Theme.Card}, 0.15) end)
+        confirmBtn.MouseEnter:Connect(function() Tween(confirmBtn, {BackgroundTransparency = 0.2}, 0.15) end)
+        confirmBtn.MouseLeave:Connect(function() Tween(confirmBtn, {BackgroundTransparency = 0}, 0.15) end)
+        
+        cancelBtn.MouseButton1Click:Connect(function() close(nil) end)
+        confirmBtn.MouseButton1Click:Connect(function() close(input.Text) end)
+        input.FocusLost:Connect(function(enter) if enter then close(input.Text) end end)
+    end
+    
+    function Window:SetScale(scale)
+        uiScale = math.clamp(scale, 0.6, 1.5)
+        local scaleObj = Main:FindFirstChild("UIScale") or Create("UIScale", {Name = "UIScale", Parent = Main})
+        Tween(scaleObj, {Scale = uiScale}, 0.2)
+        if autoSave then SaveConfig() end
+    end
+    
+    function Window:SearchTab(query)
+        local current = Window.CurrentTab
+        if not current or not Window.Tabs[current] then return {} end
+        local page = Window.Tabs[current].Page
+        local results = {}
+        query = query:lower()
+        
+        for _, child in pairs(page:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
+                if child.Text:lower():find(query) then
+                    local parent = child.Parent
+                    while parent and parent ~= page do
+                        if parent:IsA("Frame") and parent.Parent == page then
+                            table.insert(results, {Element = parent, Match = child})
+                            break
+                        end
+                        parent = parent.Parent
+                    end
+                end
+            end
+        end
+        
+        if #results > 0 then
+            local first = results[1].Element
+            local scrollFrame = page
+            if scrollFrame:IsA("ScrollingFrame") then
+                local pos = first.AbsolutePosition.Y - scrollFrame.AbsolutePosition.Y + scrollFrame.CanvasPosition.Y
+                Tween(scrollFrame, {CanvasPosition = Vector2.new(0, math.max(0, pos - 50))}, 0.3)
+            end
+            for _, r in ipairs(results) do
+                local orig = r.Element.BackgroundColor3
+                Tween(r.Element, {BackgroundColor3 = Theme.Accent}, 0.15)
+                task.delay(0.5, function() Tween(r.Element, {BackgroundColor3 = orig}, 0.3) end)
+            end
+        end
+        
+        return results
+    end
+    
+    function Window:PopoutTab(tabName)
+        local tabData = Window.Tabs[tabName]
+        if not tabData or PopoutWindows[tabName] then return end
+        
+        local popout = Create("ScreenGui", {Name = "Gatito_Popout_" .. tabName, Parent = CoreGui, ResetOnSpawn = false})
+        local popFrame = Create("Frame", {BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0,400,0,350), Parent = popout})
+        Corner(popFrame, 12)
+        Stroke(popFrame, Theme.Accent, 2)
+        
+        local titleBar = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(1,0,0,40), Parent = popFrame})
+        Corner(titleBar, 12)
+        Create("Frame", {BackgroundColor3 = Theme.Sidebar, Position = UDim2.new(0,0,0.5,0), Size = UDim2.new(1,0,0.5,0), Parent = titleBar})
+        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(1,-80,1,0), Font = Enum.Font.GothamBold, Text = tabName, TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = titleBar})
+        
+        local dockBtn = Create("TextButton", {BackgroundColor3 = Theme.Card, Position = UDim2.new(1,-70,0.5,0), AnchorPoint = Vector2.new(0,0.5), Size = UDim2.new(0,50,0,26), Font = Enum.Font.GothamMedium, Text = "Dock", TextSize = 11, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = titleBar})
+        Corner(dockBtn, 6)
+        
+        local closeBtn = Create("TextButton", {BackgroundColor3 = Theme.Error, Position = UDim2.new(1,-15,0.5,0), AnchorPoint = Vector2.new(1,0.5), Size = UDim2.new(0,26,0,26), Font = Enum.Font.GothamBold, Text = "×", TextSize = 18, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = titleBar})
+        Corner(closeBtn, 6)
+        
+        local contentArea = Create("ScrollingFrame", {BackgroundTransparency = 1, Position = UDim2.new(0,0,0,45), Size = UDim2.new(1,0,1,-50), ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.Accent, Parent = popFrame})
+        Padding(contentArea, 15)
+        Create("UIListLayout", {Padding = UDim.new(0,8), Parent = contentArea})
+        
+        tabData.Page.Parent = contentArea
+        tabData.Page.Position = UDim2.new(0,0,0,0)
+        tabData.Page.Size = UDim2.new(1,0,1,0)
+        tabData.Page.Visible = true
+        
+        PopoutWindows[tabName] = popout
+        
+        local dragging, dragStart, startPos
+        titleBar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = input.Position
+                startPos = popFrame.Position
+            end
+        end)
+        titleBar.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local delta = input.Position - dragStart
+                popFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+        
+        local function dockTab()
+            tabData.Page.Parent = ContentArea
+            tabData.Page.Position = UDim2.new(0,0,0,0)
+            tabData.Page.Size = UDim2.new(1,0,1,0)
+            tabData.Page.Visible = Window.CurrentTab == tabName
+            popout:Destroy()
+            PopoutWindows[tabName] = nil
+        end
+        
+        dockBtn.MouseButton1Click:Connect(dockTab)
+        closeBtn.MouseButton1Click:Connect(dockTab)
+        
+        popFrame.Size = UDim2.new(0,0,0,0)
+        Tween(popFrame, {Size = UDim2.new(0,400,0,350)}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        
+        return popout
+    end
+    
+    function Window:CreateThemeTab()
+        local themeTab = Window:CreateTab({Name = "Theme", Icon = "🎨"})
+        
+        themeTab:Section("Accent Color")
+        
+        local colors = {
+            {Name = "Red", Color = Color3.fromRGB(200, 80, 80)},
+            {Name = "Blue", Color = Color3.fromRGB(80, 120, 200)},
+            {Name = "Green", Color = Color3.fromRGB(80, 180, 100)},
+            {Name = "Purple", Color = Color3.fromRGB(140, 80, 200)},
+            {Name = "Orange", Color = Color3.fromRGB(220, 140, 60)},
+            {Name = "Pink", Color = Color3.fromRGB(220, 100, 160)},
+            {Name = "Cyan", Color = Color3.fromRGB(80, 180, 200)},
+            {Name = "Yellow", Color = Color3.fromRGB(220, 200, 80)}
+        }
+        
+        local colorNames = {}
+        for _, c in ipairs(colors) do table.insert(colorNames, c.Name) end
+        
+        themeTab:Dropdown({
+            Name = "Accent Color",
+            Flag = "_ThemeAccent",
+            Options = colorNames,
+            Default = "Red",
+            Callback = function(v)
+                for _, c in ipairs(colors) do
+                    if c.Name == v then Window:SetAccent(c.Color) break end
+                end
+            end
+        })
+        
+        themeTab:Section("UI Scale")
+        
+        themeTab:Slider({
+            Name = "Scale",
+            Flag = "_UIScale",
+            Min = 60,
+            Max = 150,
+            Default = 100,
+            Callback = function(v)
+                Window:SetScale(v / 100)
+            end
+        })
+        
+        themeTab:Section("Keybinds")
+        
+        themeTab:Keybind({
+            Name = "Toggle Menu",
+            Flag = "_ToggleKey",
+            Default = toggleKey,
+            Callback = function() end,
+            OnChanged = function(key)
+                toggleKey = key
+            end
+        })
+        
+        themeTab:Section("Actions")
+        
+        themeTab:Button({
+            Name = "Reset Theme",
+            Callback = function()
+                for k, v in pairs(DefaultTheme) do Theme[k] = v end
+                Window:SetScale(1)
+                Window:Notify({Title = "Theme Reset", Content = "Theme restored to defaults.", Duration = 2, Type = "Success"})
+            end
+        })
+        
+        return themeTab
+    end
+    
+    Window.Flags = Flags
+    Window.Keybinds = Keybinds
+    
+    Window.API = {
+        Notify = function(cfg) Window:Notify(cfg) end,
+        Confirm = function(cfg) return Window:Confirm(cfg) end,
+        Prompt = function(cfg) Window:Prompt(cfg) end,
+        Toggle = function(v) Window:Toggle(v) end,
+        SetTheme = function(t) Window:SetTheme(t) end,
+        SetAccent = function(c) Window:SetAccent(c) end,
+        SetScale = function(s) Window:SetScale(s) end,
+        BindKey = function(k, c, n) return Window:BindKey(k, c, n) end,
+        SaveConfig = function() Window:SaveConfig() end,
+        LoadConfig = function() return Window:LoadConfig() end,
+        GetFlag = function(f) return Flags[f] and Flags[f]:Get() end,
+        SetFlag = function(f, v) if Flags[f] then Flags[f]:Set(v) end end
+    }
+    
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.KeyCode == toggleKey then
+            Window:Toggle()
+        end
+        for _, bind in pairs(Keybinds) do
+            if input.KeyCode == bind.Key then
+                if bind.Callback then bind.Callback() end
+            end
+        end
+    end)
     
     return Window
 end
