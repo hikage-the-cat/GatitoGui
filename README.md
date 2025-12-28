@@ -2,10 +2,16 @@
 
 Roblox executor UI library with configurable homepage widgets.
 
+## Load
+
+```lua
+local Gatito = loadstring(game:HttpGet("https://raw.githubusercontent.com/hikage-the-cat/GatitoGui/refs/heads/main/gui.lua"))()
+```
+
 ## Quick Start
 
 ```lua
-local Gatito = loadstring(readfile("GatitoLib.lua"))()
+local Gatito = loadstring(game:HttpGet("https://raw.githubusercontent.com/hikage-the-cat/GatitoGui/refs/heads/main/gui.lua"))()
 
 local Window = Gatito:CreateWindow({
     Title = "My Hub",
