@@ -33,15 +33,33 @@ Gatito:CreateWindow({
     Subtitle = "v1.0",
     User = "Username",
     Size = UDim2.new(0, 700, 0, 460),
+    Icon = "🐱",
     ShowHome = true,
     Splash = true,
     SplashDuration = 2,
     ConfigName = "MyConfig",
     ConfigFolder = "GatitoConfigs",
     AutoSave = true,
+    Tutorial = true,
+    TutorialTips = {
+        Welcome = "Welcome to my hub!",
+        Tabs = "Click icons on the left to switch tabs.",
+        Drag = "Drag the icon to move the menu.",
+        Settings = "Settings save automatically!",
+        Keybind = "Press RightShift to toggle the menu.",
+        Custom = {
+            {Title = "Tip", Content = "Custom tip here"}
+        }
+    },
     Home = { ... }
 })
 ```
+
+**Drag**: Click and drag the top-left icon to move the window.
+
+**Discord Reminder**: Every 5 minutes shows clickable notification to join Discord.
+
+**Tutorial**: Shows on first run, saves completion. Click notifications to skip.
 
 ## Config System
 
@@ -106,6 +124,7 @@ Tab:Label("Text")
 
 Tab:SaveButton({Name = "Save"})
 Tab:LoadButton({Name = "Load"})
+Tab:TutorialButton({Name = "Restart Tutorial"})
 ```
 
 ## Notifications
