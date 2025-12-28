@@ -73,12 +73,66 @@ function Gatito:CreateWindow(cfg)
     local size = cfg.Size or UDim2.new(0, 680, 0, 440)
     local showSplash = cfg.Splash ~= false
     local splashDuration = cfg.SplashDuration or 2
+    local configName = cfg.ConfigName or title:gsub("%s+", "") .. "_config"
+    local autoSave = cfg.AutoSave ~= false
+    local configFolder = cfg.ConfigFolder or "GatitoConfigs"
     
     if CoreGui:FindFirstChild("GatitoLib") then
         CoreGui:FindFirstChild("GatitoLib"):Destroy()
     end
     
     local Gui = Create("ScreenGui", {Name = "GatitoLib", Parent = CoreGui, ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling})
+    
+    local Flags = {}
+    local FlagCallbacks = {}
+    
+    local function GetConfigPath()
+        return configFolder .. "/" .. configName .. ".json"
+    end
+    
+    local function EnsureFolder()
+        if isfolder and not isfolder(configFolder) then
+            makefolder(configFolder)
+        end
+    end
+    
+    local function SaveConfig()
+        local data = {}
+        for flag, obj in pairs(Flags) do
+            local val = obj:Get()
+            if typeof(val) == "EnumItem" then
+                data[flag] = {type = "keycode", value = val.Name}
+            else
+                data[flag] = {type = typeof(val), value = val}
+            end
+        end
+        EnsureFolder()
+        if writefile then
+            writefile(GetConfigPath(), HttpService:JSONEncode(data))
+        end
+    end
+    
+    local function LoadConfig()
+        EnsureFolder()
+        if isfile and isfile(GetConfigPath()) then
+            local success, data = pcall(function()
+                return HttpService:JSONDecode(readfile(GetConfigPath()))
+            end)
+            if success and data then
+                for flag, info in pairs(data) do
+                    if Flags[flag] then
+                        if info.type == "keycode" then
+                            Flags[flag]:Set(Enum.KeyCode[info.value])
+                        else
+                            Flags[flag]:Set(info.value)
+                        end
+                    end
+                end
+                return true
+            end
+        end
+        return false
+    end
     
     local Splash
     if showSplash then
@@ -142,7 +196,7 @@ function Gatito:CreateWindow(cfg)
     
     local ContentArea = Create("Frame", {Name = "Content", BackgroundTransparency = 1, Position = UDim2.new(0,55,0,0), Size = UDim2.new(1,-55,1,0), ClipsDescendants = true, Parent = Main})
     
-    local Window = {Tabs = {}, Pages = {}, CurrentTab = nil, Theme = Theme, Gui = Gui, Frame = Main, HomeEnabled = showHome, SearchResults = {}}
+    local Window = {Tabs = {}, Pages = {}, CurrentTab = nil, Theme = Theme, Gui = Gui, Frame = Main, HomeEnabled = showHome, Flags = Flags}
     
     local isDragging = false
     local dragStart, startPos
@@ -225,9 +279,9 @@ function Gatito:CreateWindow(cfg)
         local searchFrame = Create("Frame", {BackgroundColor3 = Theme.Card, Position = UDim2.new(1,-200,0,0), Size = UDim2.new(0,200,0,35), Parent = topBar})
         Corner(searchFrame, 8)
         
-        local searchIcon = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,10,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "🔍", TextSize = 14, TextColor3 = Theme.TextDim, Parent = searchFrame})
+        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,10,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "🔍", TextSize = 14, TextColor3 = Theme.TextDim, Parent = searchFrame})
         
-        local searchBox = Create("TextBox", {BackgroundTransparency = 1, Position = UDim2.new(0,35,0,0), Size = UDim2.new(1,-45,1,0), Font = Enum.Font.Gotham, PlaceholderText = "Search...", PlaceholderColor3 = Theme.TextMuted, Text = "", TextColor3 = Theme.Text, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Parent = searchFrame})
+        Create("TextBox", {BackgroundTransparency = 1, Position = UDim2.new(0,35,0,0), Size = UDim2.new(1,-45,1,0), Font = Enum.Font.Gotham, PlaceholderText = "Search...", PlaceholderColor3 = Theme.TextMuted, Text = "", TextColor3 = Theme.Text, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Parent = searchFrame})
         
         local greeting = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,70), Parent = homePage})
         
@@ -345,30 +399,6 @@ function Gatito:CreateWindow(cfg)
         Tween(homeIco, {TextColor3 = Theme.Text}, 0)
         
         homeBtn.MouseButton1Click:Connect(function() SelectTab("Home") end)
-        
-        searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-            local query = searchBox.Text:lower()
-            if query == "" then return end
-            
-            for _, tab in pairs(Window.Tabs) do
-                if tab.Page and tab.Page:FindFirstChild("UIListLayout") then
-                    for _, child in pairs(tab.Page:GetChildren()) do
-                        if child:IsA("Frame") or child:IsA("TextButton") then
-                            local found = false
-                            for _, desc in pairs(child:GetDescendants()) do
-                                if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
-                                    if desc.Text and desc.Text:lower():find(query) then
-                                        found = true
-                                        break
-                                    end
-                                end
-                            end
-                            if child.Name and child.Name:lower():find(query) then found = true end
-                        end
-                    end
-                end
-            end
-        end)
     end
     
     if showSplash then
@@ -405,6 +435,13 @@ function Gatito:CreateWindow(cfg)
                     Tween(child, {ImageTransparency = orig}, 0.3)
                 end
             end
+            
+            task.wait(0.5)
+            LoadConfig()
+        end)
+    else
+        task.delay(0.5, function()
+            LoadConfig()
         end)
     end
     
@@ -455,6 +492,7 @@ function Gatito:CreateWindow(cfg)
         
         function Tab:Toggle(cfg)
             cfg = cfg or {}
+            local flag = cfg.Flag
             local enabled = cfg.Default or false
             local btn = Create("TextButton", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,42), Text = "", AutoButtonColor = false, Parent = page})
             Corner(btn, 8)
@@ -465,9 +503,11 @@ function Gatito:CreateWindow(cfg)
             local circle = Create("Frame", {BackgroundColor3 = Theme.Text, Position = enabled and UDim2.new(1,-22,0.5,0) or UDim2.new(0,4,0.5,0), AnchorPoint = Vector2.new(0,0.5), Size = UDim2.new(0,18,0,18), Parent = switch})
             Corner(circle, 9)
             
-            local function update()
+            local function update(skipCallback)
                 Tween(switch, {BackgroundColor3 = enabled and Theme.Accent or Theme.Divider}, 0.2)
                 Tween(circle, {Position = enabled and UDim2.new(1,-22,0.5,0) or UDim2.new(0,4,0.5,0)}, 0.2)
+                if not skipCallback and cfg.Callback then cfg.Callback(enabled) end
+                if autoSave and flag then SaveConfig() end
             end
             
             btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = Theme.CardHover}, 0.15) end)
@@ -475,14 +515,20 @@ function Gatito:CreateWindow(cfg)
             btn.MouseButton1Click:Connect(function()
                 enabled = not enabled
                 update()
-                if cfg.Callback then cfg.Callback(enabled) end
             end)
             
-            return {Set = function(_, v) enabled = v update() if cfg.Callback then cfg.Callback(enabled) end end, Get = function() return enabled end}
+            local obj = {
+                Set = function(_, v, skipCallback) enabled = v update(skipCallback) end,
+                Get = function() return enabled end
+            }
+            
+            if flag then Flags[flag] = obj end
+            return obj
         end
         
         function Tab:Slider(cfg)
             cfg = cfg or {}
+            local flag = cfg.Flag
             local min, max, val = cfg.Min or 0, cfg.Max or 100, cfg.Default or cfg.Min or 0
             local inc = cfg.Increment or 1
             local sliderDragging = false
@@ -499,15 +545,19 @@ function Gatito:CreateWindow(cfg)
             local knob = Create("Frame", {BackgroundColor3 = Theme.Text, Position = UDim2.new((val-min)/(max-min),0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0,16,0,16), ZIndex = 5, Parent = bar})
             Corner(knob, 8)
             
+            local function updateVisual()
+                valLabel.Text = tostring(inc >= 1 and math.floor(val) or val)
+                fill.Size = UDim2.new((val-min)/(max-min),0,1,0)
+                knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0)
+            end
+            
             bar.InputBegan:Connect(function(i) 
                 if i.UserInputType == Enum.UserInputType.MouseButton1 then 
                     sliderDragging = true
                     local p = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
                     val = math.floor((min + (max-min)*p)/inc+0.5)*inc
                     val = math.clamp(val, min, max)
-                    valLabel.Text = tostring(inc >= 1 and math.floor(val) or val)
-                    fill.Size = UDim2.new((val-min)/(max-min),0,1,0)
-                    knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0)
+                    updateVisual()
                     if cfg.Callback then cfg.Callback(val) end
                 end 
             end)
@@ -515,6 +565,7 @@ function Gatito:CreateWindow(cfg)
             bar.InputEnded:Connect(function(i)
                 if i.UserInputType == Enum.UserInputType.MouseButton1 then
                     sliderDragging = false
+                    if autoSave and flag then SaveConfig() end
                 end
             end)
             
@@ -523,24 +574,34 @@ function Gatito:CreateWindow(cfg)
                     local p = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
                     val = math.floor((min + (max-min)*p)/inc+0.5)*inc
                     val = math.clamp(val, min, max)
-                    valLabel.Text = tostring(inc >= 1 and math.floor(val) or val)
-                    fill.Size = UDim2.new((val-min)/(max-min),0,1,0)
-                    knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0)
+                    updateVisual()
                     if cfg.Callback then cfg.Callback(val) end
                 end
             end)
             
             UserInputService.InputEnded:Connect(function(i)
-                if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                if i.UserInputType == Enum.UserInputType.MouseButton1 and sliderDragging then
                     sliderDragging = false
+                    if autoSave and flag then SaveConfig() end
                 end
             end)
             
-            return {Set = function(_,v) val = math.clamp(v,min,max) valLabel.Text = tostring(inc >= 1 and math.floor(val) or val) fill.Size = UDim2.new((val-min)/(max-min),0,1,0) knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0) if cfg.Callback then cfg.Callback(val) end end, Get = function() return val end}
+            local obj = {
+                Set = function(_,v, skipCallback)
+                    val = math.clamp(v,min,max)
+                    updateVisual()
+                    if not skipCallback and cfg.Callback then cfg.Callback(val) end
+                end,
+                Get = function() return val end
+            }
+            
+            if flag then Flags[flag] = obj end
+            return obj
         end
         
         function Tab:Dropdown(cfg)
             cfg = cfg or {}
+            local flag = cfg.Flag
             local opts = cfg.Options or {}
             local selected = cfg.Default or opts[1] or ""
             local open = false
@@ -572,6 +633,7 @@ function Gatito:CreateWindow(cfg)
                     Tween(frame, {Size = UDim2.new(1,0,0,70)}, 0.2)
                     Tween(arrow, {Rotation = 0}, 0.2)
                     if cfg.Callback then cfg.Callback(opt) end
+                    if autoSave and flag then SaveConfig() end
                 end)
             end
             
@@ -581,11 +643,22 @@ function Gatito:CreateWindow(cfg)
                 Tween(arrow, {Rotation = open and 180 or 0}, 0.2)
             end)
             
-            return {Set = function(_,v) selected = v selText.Text = v if cfg.Callback then cfg.Callback(v) end end, Get = function() return selected end}
+            local obj = {
+                Set = function(_,v, skipCallback)
+                    selected = v
+                    selText.Text = v
+                    if not skipCallback and cfg.Callback then cfg.Callback(v) end
+                end,
+                Get = function() return selected end
+            }
+            
+            if flag then Flags[flag] = obj end
+            return obj
         end
         
         function Tab:Textbox(cfg)
             cfg = cfg or {}
+            local flag = cfg.Flag
             local frame = Create("Frame", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,70), Parent = page})
             Corner(frame, 8)
             Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,10), Size = UDim2.new(1,-30,0,18), Font = Enum.Font.GothamMedium, Text = cfg.Name or "Textbox", TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = frame})
@@ -594,13 +667,23 @@ function Gatito:CreateWindow(cfg)
             Corner(inputFrame, 6)
             local input = Create("TextBox", {BackgroundTransparency = 1, Position = UDim2.new(0,10,0,0), Size = UDim2.new(1,-20,1,0), Font = Enum.Font.Gotham, PlaceholderText = cfg.Placeholder or "", PlaceholderColor3 = Theme.TextMuted, Text = cfg.Default or "", TextColor3 = Theme.Text, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Parent = inputFrame})
             
-            input.FocusLost:Connect(function(enter) if enter and cfg.Callback then cfg.Callback(input.Text) end end)
+            input.FocusLost:Connect(function(enter)
+                if enter and cfg.Callback then cfg.Callback(input.Text) end
+                if autoSave and flag then SaveConfig() end
+            end)
             
-            return {Set = function(_,t) input.Text = t end, Get = function() return input.Text end}
+            local obj = {
+                Set = function(_,t) input.Text = t end,
+                Get = function() return input.Text end
+            }
+            
+            if flag then Flags[flag] = obj end
+            return obj
         end
         
         function Tab:Keybind(cfg)
             cfg = cfg or {}
+            local flag = cfg.Flag
             local key = cfg.Default or Enum.KeyCode.Unknown
             local listening = false
             
@@ -623,19 +706,65 @@ function Gatito:CreateWindow(cfg)
                     keyBtn.Text = key.Name
                     listening = false
                     Tween(keyBtn, {BackgroundColor3 = Theme.Divider, TextColor3 = Theme.Accent}, 0.15)
+                    if autoSave and flag then SaveConfig() end
                 elseif not gpe and i.KeyCode == key and cfg.Callback then
                     cfg.Callback()
                 end
             end)
             
-            return {Set = function(_,k) key = k keyBtn.Text = key.Name end, Get = function() return key end}
+            local obj = {
+                Set = function(_,k) key = k keyBtn.Text = key.Name end,
+                Get = function() return key end
+            }
+            
+            if flag then Flags[flag] = obj end
+            return obj
         end
         
         function Tab:Label(text)
             Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Font = Enum.Font.Gotham, Text = text, TextSize = 13, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = page})
         end
         
+        function Tab:SaveButton(cfg)
+            cfg = cfg or {}
+            local btn = Create("TextButton", {BackgroundColor3 = Theme.Success, Size = UDim2.new(1,0,0,42), Text = "", AutoButtonColor = false, Parent = page})
+            Corner(btn, 8)
+            Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(1,-50,1,0), Font = Enum.Font.GothamMedium, Text = cfg.Name or "Save Config", TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = btn})
+            Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(1,-35,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "💾", TextSize = 16, Parent = btn})
+            btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = Color3.fromRGB(100, 220, 140)}, 0.15) end)
+            btn.MouseLeave:Connect(function() Tween(btn, {BackgroundColor3 = Theme.Success}, 0.15) end)
+            btn.MouseButton1Click:Connect(function()
+                SaveConfig()
+                Window:Notify({Title = "Config Saved", Content = "Your settings have been saved.", Duration = 3, Type = "Success"})
+            end)
+        end
+        
+        function Tab:LoadButton(cfg)
+            cfg = cfg or {}
+            local btn = Create("TextButton", {BackgroundColor3 = Theme.Accent, Size = UDim2.new(1,0,0,42), Text = "", AutoButtonColor = false, Parent = page})
+            Corner(btn, 8)
+            Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(1,-50,1,0), Font = Enum.Font.GothamMedium, Text = cfg.Name or "Load Config", TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = btn})
+            Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(1,-35,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "📂", TextSize = 16, Parent = btn})
+            btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = Theme.AccentDark}, 0.15) end)
+            btn.MouseLeave:Connect(function() Tween(btn, {BackgroundColor3 = Theme.Accent}, 0.15) end)
+            btn.MouseButton1Click:Connect(function()
+                if LoadConfig() then
+                    Window:Notify({Title = "Config Loaded", Content = "Your settings have been loaded.", Duration = 3, Type = "Success"})
+                else
+                    Window:Notify({Title = "No Config", Content = "No saved config found.", Duration = 3, Type = "Warning"})
+                end
+            end)
+        end
+        
         return Tab
+    end
+    
+    function Window:SaveConfig()
+        SaveConfig()
+    end
+    
+    function Window:LoadConfig()
+        return LoadConfig()
     end
     
     function Window:Notify(cfg)
