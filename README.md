@@ -1,6 +1,6 @@
 # Gatito GUI Library
 
-Roblox executor UI library with configurable homepage widgets.
+Roblox executor UI library with configurable homepage widgets and config saving.
 
 ## Load
 
@@ -15,15 +15,14 @@ local Gatito = loadstring(game:HttpGet("https://raw.githubusercontent.com/hikage
 
 local Window = Gatito:CreateWindow({
     Title = "My Hub",
-    ShowHome = true,
-    Home = {
-        UserInfo = {Access = "Premium", Executions = 100, Expires = "Lifetime"},
-        Games = {List = {{Name = "Game", Status = "working"}}}
-    }
+    ConfigName = "MyHub",
+    AutoSave = true
 })
 
 local Tab = Window:CreateTab({Name = "Main", Icon = "⚔️"})
-Tab:Button({Name = "Click", Callback = function() end})
+
+Tab:Toggle({Name = "Speed", Flag = "SpeedEnabled", Callback = function(v) end})
+Tab:Slider({Name = "Speed Value", Flag = "SpeedValue", Min = 16, Max = 200, Callback = function(v) end})
 ```
 
 ## Window Options
@@ -35,47 +34,56 @@ Gatito:CreateWindow({
     User = "Username",
     Size = UDim2.new(0, 700, 0, 460),
     ShowHome = true,
+    Splash = true,
+    SplashDuration = 2,
+    ConfigName = "MyConfig",
+    ConfigFolder = "GatitoConfigs",
+    AutoSave = true,
     Home = { ... }
 })
 ```
+
+## Config System
+
+Add `Flag` to any element to make it saveable:
+
+```lua
+Tab:Toggle({Name = "Speed Boost", Flag = "SpeedBoost", Default = false, Callback = function(v) end})
+Tab:Slider({Name = "Walk Speed", Flag = "WalkSpeed", Min = 16, Max = 200, Callback = function(v) end})
+Tab:Dropdown({Name = "Mode", Flag = "Mode", Options = {"A", "B"}, Callback = function(v) end})
+Tab:Textbox({Name = "Name", Flag = "PlayerName", Callback = function(v) end})
+Tab:Keybind({Name = "Toggle", Flag = "ToggleKey", Default = Enum.KeyCode.F, Callback = function() end})
+```
+
+**Auto Save**: When `AutoSave = true`, settings save automatically on change.
+
+**Manual Save/Load Buttons**:
+```lua
+Tab:SaveButton({Name = "Save Settings"})
+Tab:LoadButton({Name = "Load Settings"})
+```
+
+**Manual Save/Load Methods**:
+```lua
+Window:SaveConfig()
+Window:LoadConfig()
+```
+
+Config files are stored in: `GatitoConfigs/ConfigName.json`
 
 ## Home Widgets
 
 ```lua
 Home = {
-    UserInfo = {
-        Access = "Premium",
-        Executions = 451,
-        Expires = "Infinite/Lifetime"
-    },
+    UserInfo = {Access = "Premium", Executions = 451, Expires = "Lifetime"},
     Avatar = true,
-    Updates = {
-        List = {
-            {Title = "Update Title", Changes = {"Change 1", "Change 2"}}
-        }
-    },
-    Games = {
-        List = {
-            {Name = "Game Name", Status = "working"},
-            {Name = "Game 2", Status = "issues", Tag = "BETA", TagColor = Color3.fromRGB(200,80,80)},
-            {Name = "Game 3", Status = "broken"}
-        }
-    },
-    Widgets = {
-        {Title = "Custom", Content = "Any text here"}
-    }
+    Updates = {List = {{Title = "v1.0", Changes = {"Initial release"}}}},
+    Games = {List = {{Name = "Game", Status = "working", Tag = "NEW"}}},
+    Widgets = {{Title = "Notice", Content = "Text here"}}
 }
 ```
 
-Disable widgets: `UserInfo = false`, `Avatar = false`, `Updates = false`, `Games = false`
-
-Disable homepage entirely: `ShowHome = false`
-
-## Tabs
-
-```lua
-local Tab = Window:CreateTab({Name = "Tab Name", Icon = "🎮"})
-```
+Disable widgets: `UserInfo = false`, `Avatar = false`, etc.
 
 ## Components
 
@@ -84,17 +92,20 @@ Tab:Section("Section Name")
 
 Tab:Button({Name = "Button", Callback = function() end})
 
-Tab:Toggle({Name = "Toggle", Default = false, Callback = function(enabled) end})
+Tab:Toggle({Name = "Toggle", Flag = "MyToggle", Default = false, Callback = function(v) end})
 
-Tab:Slider({Name = "Slider", Min = 0, Max = 100, Default = 50, Increment = 1, Callback = function(value) end})
+Tab:Slider({Name = "Slider", Flag = "MySlider", Min = 0, Max = 100, Default = 50, Callback = function(v) end})
 
-Tab:Dropdown({Name = "Dropdown", Options = {"A", "B", "C"}, Default = "A", Callback = function(selected) end})
+Tab:Dropdown({Name = "Dropdown", Flag = "MyDropdown", Options = {"A", "B"}, Default = "A", Callback = function(v) end})
 
-Tab:Textbox({Name = "Input", Placeholder = "Enter...", Default = "", Callback = function(text) end})
+Tab:Textbox({Name = "Input", Flag = "MyInput", Placeholder = "Enter...", Callback = function(t) end})
 
-Tab:Keybind({Name = "Keybind", Default = Enum.KeyCode.F, Callback = function() end})
+Tab:Keybind({Name = "Keybind", Flag = "MyKeybind", Default = Enum.KeyCode.F, Callback = function() end})
 
-Tab:Label("Text here")
+Tab:Label("Text")
+
+Tab:SaveButton({Name = "Save"})
+Tab:LoadButton({Name = "Load"})
 ```
 
 ## Notifications
@@ -103,24 +114,14 @@ Tab:Label("Text here")
 Window:Notify({Title = "Title", Content = "Message", Duration = 5, Type = "Success"})
 ```
 
-Types: `Info`, `Success`, `Warning`, `Error`
-
 ## Methods
 
 ```lua
 Window:Toggle()
-Window:Toggle(true)
-Window:Toggle(false)
 Window:Destroy()
+Window:SaveConfig()
+Window:LoadConfig()
 ```
-
-## Game Status Values
-
-| Status | Color |
-|--------|-------|
-| working | Green |
-| issues | Yellow |
-| broken | Red |
 
 ---
 
