@@ -363,6 +363,14 @@ function Gatito:CreateWindow(cfg)
             end
         end)
         
+        if not isHome then
+            btn.MouseButton2Click:Connect(function()
+                if Window.Tabs[name] and not PopoutWindows[name] then
+                    Window:PopoutTab(name)
+                end
+            end)
+        end
+        
         return btn, ico
     end
     
@@ -394,7 +402,7 @@ function Gatito:CreateWindow(cfg)
         
         local homeLayout = Create("UIListLayout", {Padding = UDim.new(0,15), Parent = homePage})
         homeLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            homePage.CanvasSize = UDim2.new(0,0,0,homeLayout.AbsoluteContentSize.Y + 40)
+            homePage.CanvasSize = UDim2.new(0,0,0,homeLayout.AbsoluteContentSize.Y + 80)
         end)
         
         local topBar = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,40), Parent = homePage})
@@ -465,9 +473,7 @@ function Gatito:CreateWindow(cfg)
                 btn.MouseButton1Click:Connect(function()
                     searchBox.Text = ""
                     searchResults.Visible = false
-                    if result.tab and result.tab.Button then
-                        result.tab.Button.MouseButton1Click:Fire()
-                    end
+                    SelectTab(result.tabName or result.name)
                 end)
             end
         end
@@ -1014,7 +1020,7 @@ function Gatito:CreateWindow(cfg)
         
         local layout = Create("UIListLayout", {Padding = UDim.new(0,10), Parent = page})
         layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            page.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 40)
+            page.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 80)
         end)
         
         Window.Tabs[name] = {Button = btn, Icon = ico, Page = page}
@@ -1491,6 +1497,23 @@ function Gatito:CreateWindow(cfg)
     function Window:SetAccent(color)
         Theme.Accent = color
         Theme.AccentDark = Color3.new(color.R * 0.8, color.G * 0.8, color.B * 0.8)
+        
+        for _, tabData in pairs(Window.Tabs) do
+            if Window.CurrentTab == _ then
+                Tween(tabData.Button, {BackgroundColor3 = color}, 0.2)
+            end
+            if tabData.Page then
+                tabData.Page.ScrollBarImageColor3 = color
+            end
+        end
+        
+        for _, element in pairs(Gui:GetDescendants()) do
+            if element:IsA("UIStroke") and element.Color == DefaultTheme.Accent then
+                Tween(element, {Color = color}, 0.2)
+            end
+        end
+        
+        Window:Notify({Title = "Theme Updated", Content = "Accent color changed.", Duration = 1.5, Type = "Success"})
         if autoSave then SaveConfig() end
     end
     
@@ -1662,31 +1685,27 @@ function Gatito:CreateWindow(cfg)
         if not tabData or PopoutWindows[tabName] then return end
         
         local popout = Create("ScreenGui", {Name = "Gatito_Popout_" .. tabName, Parent = CoreGui, ResetOnSpawn = false})
-        local popFrame = Create("Frame", {BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0,400,0,350), Parent = popout})
+        local popFrame = Create("Frame", {BackgroundColor3 = Theme.Background, Position = UDim2.new(0.3,0,0.3,0), Size = UDim2.new(0,420,0,380), Parent = popout})
         Corner(popFrame, 12)
         Stroke(popFrame, Theme.Accent, 2)
         
-        local titleBar = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(1,0,0,40), Parent = popFrame})
+        local titleBar = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(1,0,0,36), Parent = popFrame})
         Corner(titleBar, 12)
         Create("Frame", {BackgroundColor3 = Theme.Sidebar, Position = UDim2.new(0,0,0.5,0), Size = UDim2.new(1,0,0.5,0), Parent = titleBar})
-        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(1,-80,1,0), Font = Enum.Font.GothamBold, Text = tabName, TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = titleBar})
         
-        local dockBtn = Create("TextButton", {BackgroundColor3 = Theme.Card, Position = UDim2.new(1,-70,0.5,0), AnchorPoint = Vector2.new(0,0.5), Size = UDim2.new(0,50,0,26), Font = Enum.Font.GothamMedium, Text = "Dock", TextSize = 11, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = titleBar})
-        Corner(dockBtn, 6)
+        local titleIcon = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,12,0,0), Size = UDim2.new(0,24,1,0), Font = Enum.Font.GothamBold, Text = tabData.Icon and tabData.Icon.Text or "📌", TextSize = 16, Parent = titleBar})
+        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,38,0,0), Size = UDim2.new(1,-90,1,0), Font = Enum.Font.GothamBold, Text = tabName, TextSize = 13, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = titleBar})
         
-        local closeBtn = Create("TextButton", {BackgroundColor3 = Theme.Error, Position = UDim2.new(1,-15,0.5,0), AnchorPoint = Vector2.new(1,0.5), Size = UDim2.new(0,26,0,26), Font = Enum.Font.GothamBold, Text = "×", TextSize = 18, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = titleBar})
+        local closeBtn = Create("TextButton", {BackgroundColor3 = Theme.Error, Position = UDim2.new(1,-10,0.5,0), AnchorPoint = Vector2.new(1,0.5), Size = UDim2.new(0,24,0,24), Font = Enum.Font.GothamBold, Text = "×", TextSize = 16, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = titleBar})
         Corner(closeBtn, 6)
         
-        local contentArea = Create("ScrollingFrame", {BackgroundTransparency = 1, Position = UDim2.new(0,0,0,45), Size = UDim2.new(1,0,1,-50), ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.Accent, Parent = popFrame})
-        Padding(contentArea, 15)
-        Create("UIListLayout", {Padding = UDim.new(0,8), Parent = contentArea})
-        
-        tabData.Page.Parent = contentArea
-        tabData.Page.Position = UDim2.new(0,0,0,0)
-        tabData.Page.Size = UDim2.new(1,0,1,0)
+        tabData.Page.Parent = popFrame
+        tabData.Page.Position = UDim2.new(0,0,0,40)
+        tabData.Page.Size = UDim2.new(1,0,1,-44)
         tabData.Page.Visible = true
         
         PopoutWindows[tabName] = popout
+        tabData.Button.Visible = false
         
         local dragging, dragStart, startPos
         titleBar.InputBegan:Connect(function(input)
@@ -1711,15 +1730,21 @@ function Gatito:CreateWindow(cfg)
             tabData.Page.Position = UDim2.new(0,0,0,0)
             tabData.Page.Size = UDim2.new(1,0,1,0)
             tabData.Page.Visible = Window.CurrentTab == tabName
+            tabData.Button.Visible = true
             popout:Destroy()
             PopoutWindows[tabName] = nil
+            Window:Notify({Title = "Tab Docked", Content = tabName .. " returned to main window.", Duration = 2, Type = "Info"})
         end
         
-        dockBtn.MouseButton1Click:Connect(dockTab)
         closeBtn.MouseButton1Click:Connect(dockTab)
+        closeBtn.MouseEnter:Connect(function() Tween(closeBtn, {BackgroundTransparency = 0.3}, 0.1) end)
+        closeBtn.MouseLeave:Connect(function() Tween(closeBtn, {BackgroundTransparency = 0}, 0.1) end)
         
-        popFrame.Size = UDim2.new(0,0,0,0)
-        Tween(popFrame, {Size = UDim2.new(0,400,0,350)}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        popFrame.BackgroundTransparency = 1
+        popFrame.Size = UDim2.new(0,380,0,340)
+        Tween(popFrame, {Size = UDim2.new(0,420,0,380), BackgroundTransparency = 0}, 0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        
+        Window:Notify({Title = "Tab Popped Out", Content = "Right-click tab or close to dock back.", Duration = 2, Type = "Info"})
         
         return popout
     end
@@ -1737,23 +1762,33 @@ function Gatito:CreateWindow(cfg)
             {Name = "Orange", Color = Color3.fromRGB(220, 140, 60)},
             {Name = "Pink", Color = Color3.fromRGB(220, 100, 160)},
             {Name = "Cyan", Color = Color3.fromRGB(80, 180, 200)},
-            {Name = "Yellow", Color = Color3.fromRGB(220, 200, 80)}
+            {Name = "Yellow", Color = Color3.fromRGB(220, 200, 80)},
+            {Name = "Lime", Color = Color3.fromRGB(150, 220, 80)},
+            {Name = "Teal", Color = Color3.fromRGB(80, 200, 180)},
+            {Name = "Magenta", Color = Color3.fromRGB(200, 80, 180)},
+            {Name = "Gold", Color = Color3.fromRGB(255, 200, 100)}
         }
         
-        local colorNames = {}
-        for _, c in ipairs(colors) do table.insert(colorNames, c.Name) end
+        local themeTabPage = Window.Tabs["Theme"] and Window.Tabs["Theme"].Page
+        local colorGrid = Create("Frame", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,90), Parent = themeTabPage})
+        Corner(colorGrid, 8)
+        Padding(colorGrid, 10)
+        local grid = Create("UIGridLayout", {CellSize = UDim2.new(0,36,0,36), CellPadding = UDim2.new(0,8,0,8), Parent = colorGrid})
         
-        themeTab:Dropdown({
-            Name = "Accent Color",
-            Flag = "_ThemeAccent",
-            Options = colorNames,
-            Default = "Red",
-            Callback = function(v)
-                for _, c in ipairs(colors) do
-                    if c.Name == v then Window:SetAccent(c.Color) break end
-                end
-            end
-        })
+        for _, c in ipairs(colors) do
+            local colorBtn = Create("TextButton", {BackgroundColor3 = c.Color, Size = UDim2.new(0,36,0,36), Text = "", AutoButtonColor = false, Parent = colorGrid})
+            Corner(colorBtn, 8)
+            
+            colorBtn.MouseEnter:Connect(function()
+                Tween(colorBtn, {Size = UDim2.new(0,40,0,40)}, 0.1)
+            end)
+            colorBtn.MouseLeave:Connect(function()
+                Tween(colorBtn, {Size = UDim2.new(0,36,0,36)}, 0.1)
+            end)
+            colorBtn.MouseButton1Click:Connect(function()
+                Window:SetAccent(c.Color)
+            end)
+        end
         
         themeTab:Section("UI Scale")
         
