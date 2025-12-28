@@ -209,15 +209,162 @@ Tab:TutorialButton({Name = "Restart Tutorial"})
 
 ```lua
 Window:Notify({Title = "Title", Content = "Message", Duration = 5, Type = "Success"})
+Window:Notify({Title = "Click Me", Content = "With callback", OnClick = function() print("clicked") end})
+```
+
+## Modals
+
+**Confirm Dialog**:
+```lua
+Window:Confirm({
+    Title = "Are you sure?",
+    Content = "This action cannot be undone.",
+    Icon = "⚠️",
+    ConfirmText = "Yes",
+    CancelText = "No",
+    ConfirmColor = Color3.fromRGB(255,80,80),
+    Callback = function(confirmed)
+        if confirmed then print("Confirmed!") end
+    end
+})
+```
+
+**Prompt Dialog**:
+```lua
+Window:Prompt({
+    Title = "Enter Name",
+    Content = "What should we call you?",
+    Placeholder = "Name...",
+    Default = "",
+    Callback = function(text)
+        if text then print("Entered:", text) end
+    end
+})
+```
+
+## Visibility Conditions
+
+Show/hide elements based on flags:
+```lua
+Tab:Toggle({Name = "Enable Advanced", Flag = "AdvancedMode", Callback = function(v) end})
+Tab:Slider({Name = "Advanced Setting", Flag = "AdvSetting", VisibleIf = "AdvancedMode", ...})
+```
+
+The slider only shows when the toggle is ON.
+
+## Keybind System
+
+**Global Keybinds**:
+```lua
+Window:BindKey(Enum.KeyCode.G, function() print("G pressed") end, "MyBind")
+Window:UnbindKey("MyBind")
+```
+
+**Element Keybinds**:
+```lua
+Tab:Toggle({Name = "Speed", Flag = "Speed", Keybind = Enum.KeyCode.V, Callback = function(v) end})
+Tab:Button({Name = "Reset", Keybind = Enum.KeyCode.R, Callback = function() end})
+```
+
+## Theme Customization
+
+**Set Theme**:
+```lua
+Window:SetTheme({
+    Accent = Color3.fromRGB(100, 150, 255),
+    Background = Color3.fromRGB(20, 20, 25)
+})
+```
+
+**Set Accent Only**:
+```lua
+Window:SetAccent(Color3.fromRGB(255, 100, 150))
+```
+
+**Built-in Theme Tab**:
+```lua
+Window:CreateThemeTab()
+```
+
+Adds a "Theme" tab with accent color, UI scale, and keybind settings.
+
+## UI Scale
+
+```lua
+Window:SetScale(1.2)  -- 0.6 to 1.5
+```
+
+## Update Loop
+
+For performance-safe loops:
+```lua
+local connection = Window:OnUpdate(function(dt)
+    -- runs every frame, throttled
+    print("Delta:", dt)
+end, "MyLoop")
+
+connection:Disconnect()  -- stop the loop
+```
+
+## Pop-out Tabs
+
+Detach a tab into its own floating window:
+```lua
+Window:PopoutTab("Settings")
+```
+
+## Per-Tab Search
+
+Search within current tab, auto-scroll and highlight:
+```lua
+Window:SearchTab("speed")
+```
+
+## Custom Widgets (Plugin System)
+
+Register custom widgets globally:
+```lua
+Gatito:RegisterWidget("ColorPicker", function(Tab, cfg, page, Theme)
+    -- build your widget here
+    return myWidget
+end)
+```
+
+Use in tabs:
+```lua
+Tab:Custom("ColorPicker", {Name = "Pick Color", Default = Color3.new(1,0,0)})
+```
+
+## Safe API
+
+Access sandboxed API without touching internals:
+```lua
+Window.API.Notify({Title = "Hello"})
+Window.API.SetAccent(Color3.fromRGB(100, 200, 255))
+Window.API.SetFlag("SpeedEnabled", true)
+local val = Window.API.GetFlag("SpeedValue")
 ```
 
 ## Methods
 
 ```lua
-Window:Toggle()
-Window:Destroy()
-Window:SaveConfig()
-Window:LoadConfig()
+Window:Toggle()                -- Toggle visibility
+Window:Toggle(true)            -- Show
+Window:Toggle(false)           -- Hide
+Window:Destroy()               -- Clean up
+Window:SaveConfig()            -- Manual save
+Window:LoadConfig()            -- Manual load
+Window:SetTheme(themeTable)    -- Override theme colors
+Window:SetAccent(color)        -- Set accent color
+Window:SetScale(scale)         -- Set UI scale (0.6-1.5)
+Window:BindKey(key, cb, name)  -- Bind global keybind
+Window:UnbindKey(name)         -- Unbind keybind
+Window:OnUpdate(callback, name)-- Add update loop
+Window:Confirm(cfg)            -- Show confirm dialog
+Window:Prompt(cfg)             -- Show text input dialog
+Window:SearchTab(query)        -- Search current tab
+Window:PopoutTab(tabName)      -- Detach tab to window
+Window:CreateThemeTab()        -- Add built-in theme tab
 ```
 
 ---
