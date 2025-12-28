@@ -1684,24 +1684,30 @@ function Gatito:CreateWindow(cfg)
         local tabData = Window.Tabs[tabName]
         if not tabData or PopoutWindows[tabName] then return end
         
-        local popout = Create("ScreenGui", {Name = "Gatito_Popout_" .. tabName, Parent = CoreGui, ResetOnSpawn = false})
-        local popFrame = Create("Frame", {BackgroundColor3 = Theme.Background, Position = UDim2.new(0.3,0,0.3,0), Size = UDim2.new(0,420,0,380), Parent = popout})
+        local popout = Create("ScreenGui", {Name = "Gatito_Popout_" .. tabName, Parent = CoreGui, ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling})
+        local popFrame = Create("Frame", {BackgroundColor3 = Theme.Background, Position = UDim2.new(0.25,0,0.2,0), Size = UDim2.new(0,450,0,400), ClipsDescendants = true, Parent = popout})
         Corner(popFrame, 12)
         Stroke(popFrame, Theme.Accent, 2)
         
-        local titleBar = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(1,0,0,36), Parent = popFrame})
+        local titleBar = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(1,0,0,40), ClipsDescendants = true, Parent = popFrame})
         Corner(titleBar, 12)
         Create("Frame", {BackgroundColor3 = Theme.Sidebar, Position = UDim2.new(0,0,0.5,0), Size = UDim2.new(1,0,0.5,0), Parent = titleBar})
         
-        local titleIcon = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,12,0,0), Size = UDim2.new(0,24,1,0), Font = Enum.Font.GothamBold, Text = tabData.Icon and tabData.Icon.Text or "📌", TextSize = 16, Parent = titleBar})
-        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,38,0,0), Size = UDim2.new(1,-90,1,0), Font = Enum.Font.GothamBold, Text = tabName, TextSize = 13, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = titleBar})
+        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(0,24,1,0), Font = Enum.Font.GothamBold, Text = tabData.Icon and tabData.Icon.Text or "📌", TextSize = 18, Parent = titleBar})
+        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,45,0,0), Size = UDim2.new(1,-100,1,0), Font = Enum.Font.GothamBold, Text = tabName, TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = titleBar})
         
-        local closeBtn = Create("TextButton", {BackgroundColor3 = Theme.Error, Position = UDim2.new(1,-10,0.5,0), AnchorPoint = Vector2.new(1,0.5), Size = UDim2.new(0,24,0,24), Font = Enum.Font.GothamBold, Text = "×", TextSize = 16, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = titleBar})
+        local closeBtn = Create("TextButton", {BackgroundColor3 = Theme.Error, Position = UDim2.new(1,-12,0.5,0), AnchorPoint = Vector2.new(1,0.5), Size = UDim2.new(0,28,0,28), Font = Enum.Font.GothamBold, Text = "×", TextSize = 18, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = titleBar})
         Corner(closeBtn, 6)
         
-        tabData.Page.Parent = popFrame
-        tabData.Page.Position = UDim2.new(0,0,0,40)
-        tabData.Page.Size = UDim2.new(1,0,1,-44)
+        local contentHolder = Create("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0,0,0,44), Size = UDim2.new(1,0,1,-48), ClipsDescendants = true, Parent = popFrame})
+        
+        local origParent = tabData.Page.Parent
+        local origPos = tabData.Page.Position
+        local origSize = tabData.Page.Size
+        
+        tabData.Page.Parent = contentHolder
+        tabData.Page.Position = UDim2.new(0,0,0,0)
+        tabData.Page.Size = UDim2.new(1,0,1,0)
         tabData.Page.Visible = true
         
         PopoutWindows[tabName] = popout
@@ -1740,11 +1746,11 @@ function Gatito:CreateWindow(cfg)
         closeBtn.MouseEnter:Connect(function() Tween(closeBtn, {BackgroundTransparency = 0.3}, 0.1) end)
         closeBtn.MouseLeave:Connect(function() Tween(closeBtn, {BackgroundTransparency = 0}, 0.1) end)
         
-        popFrame.BackgroundTransparency = 1
-        popFrame.Size = UDim2.new(0,380,0,340)
-        Tween(popFrame, {Size = UDim2.new(0,420,0,380), BackgroundTransparency = 0}, 0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        popFrame.Position = UDim2.new(0.25,-20,0.2,-20)
+        popFrame.BackgroundTransparency = 0.5
+        Tween(popFrame, {Position = UDim2.new(0.25,0,0.2,0), BackgroundTransparency = 0}, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
         
-        Window:Notify({Title = "Tab Popped Out", Content = "Right-click tab or close to dock back.", Duration = 2, Type = "Info"})
+        Window:Notify({Title = "Tab Popped Out", Content = "Click X or right-click tab to dock back.", Duration = 2, Type = "Info"})
         
         return popout
     end
