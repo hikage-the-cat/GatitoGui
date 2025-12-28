@@ -497,44 +497,189 @@ function Gatito:CreateWindow(cfg)
         tutorialActive = true
         tutorialSkipped = false
         
-        local tips = {
-            {Title = "Welcome!", Content = tutorialTips.Welcome or "Welcome to " .. title .. "! Here's a quick guide."},
-            {Title = "Navigation", Content = tutorialTips.Tabs or "Look at the left sidebar for tabs. Click icons to switch between them."},
-            {Title = "Drag Menu", Content = tutorialTips.Drag or "Click and drag the top-left icon (" .. logoIcon .. ") to move this window."},
-            {Title = "Settings", Content = tutorialTips.Settings or "Your settings auto-save! They'll be restored next time."}
-        }
-        if tutorialTips.Keybind then
-            table.insert(tips, {Title = "Keybind", Content = tutorialTips.Keybind})
+        local overlay = Create("Frame", {Name = "TutorialOverlay", BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0), ZIndex = 100, Parent = Gui})
+        
+        local highlight = Create("Frame", {Name = "Highlight", BackgroundTransparency = 1, ZIndex = 101, Parent = Gui})
+        local highlightStroke = Create("UIStroke", {Color = Theme.Accent, Thickness = 3, Parent = highlight})
+        Corner(highlight, 10)
+        
+        local bubble = Create("Frame", {Name = "Bubble", BackgroundColor3 = Theme.Card, Size = UDim2.new(0, 280, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, ZIndex = 102, Visible = false, Parent = Gui})
+        Corner(bubble, 10)
+        Stroke(bubble, Theme.Accent, 2)
+        
+        local bubbleContent = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Parent = bubble})
+        Padding(bubbleContent, 15)
+        Create("UIListLayout", {Padding = UDim.new(0,8), Parent = bubbleContent})
+        
+        local bubbleTitle = Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,20), Font = Enum.Font.GothamBold, Text = "", TextSize = 16, TextColor3 = Theme.Accent, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102, Parent = bubbleContent})
+        local bubbleText = Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Font = Enum.Font.Gotham, Text = "", TextSize = 13, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 102, Parent = bubbleContent})
+        local bubbleHint = Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,16), Font = Enum.Font.GothamMedium, Text = "👆 Click the highlighted area to continue", TextSize = 11, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102, Parent = bubbleContent})
+        
+        local skipBtn = Create("TextButton", {BackgroundColor3 = Theme.Error, Position = UDim2.new(1,-70,0,10), Size = UDim2.new(0,60,0,24), Font = Enum.Font.GothamBold, Text = "Skip", TextSize = 11, TextColor3 = Theme.Text, AutoButtonColor = false, ZIndex = 103, Parent = bubble})
+        Corner(skipBtn, 6)
+        
+        local stepIndex = 0
+        local stepComplete = false
+        local tutorialSteps = {}
+        
+        table.insert(tutorialSteps, {
+            Target = Logo,
+            Title = "Drag the Menu",
+            Text = tutorialTips.Drag or "Click and drag this icon to move the window around!",
+            Position = "right"
+        })
+        
+        local firstTab = nil
+        for _, child in pairs(NavScroll:GetChildren()) do
+            if child:IsA("TextButton") and child.Name ~= "Home" then
+                firstTab = child
+                break
+            end
         end
+        if firstTab then
+            table.insert(tutorialSteps, {
+                Target = firstTab,
+                Title = "Switch Tabs",
+                Text = tutorialTips.Tabs or "Click these icons to switch between different tabs!",
+                Position = "right"
+            })
+        end
+        
+        if Window.Tabs["Home"] then
+            table.insert(tutorialSteps, {
+                Target = Window.Tabs["Home"].Button,
+                Title = "Home Tab",
+                Text = "This is the home tab. Click it to see updates and info!",
+                Position = "right"
+            })
+        end
+        
         if tutorialTips.Custom then
             for _, tip in ipairs(tutorialTips.Custom) do
-                table.insert(tips, tip)
+                if tip.Target then
+                    table.insert(tutorialSteps, tip)
+                end
             end
         end
         
-        Window:Notify({Title = "Tutorial", Content = "Starting tutorial... Click here to skip!", Duration = 3, Type = "Info", OnClick = function()
-            tutorialSkipped = true
-            SetTutorialDone(true)
-            Window:Notify({Title = "Skipped", Content = "Tutorial skipped! You can restart it anytime.", Duration = 2, Type = "Success"})
-        end})
-        
-        task.spawn(function()
-            task.wait(3)
-            for i, tip in ipairs(tips) do
-                if tutorialSkipped then break end
-                Window:Notify({Title = "Tip " .. i .. "/" .. #tips, Content = tip.Content, Duration = 4, Type = "Info", OnClick = function()
-                    tutorialSkipped = true
-                    SetTutorialDone(true)
-                    Window:Notify({Title = "Skipped", Content = "Tutorial skipped!", Duration = 2, Type = "Success"})
-                end})
-                task.wait(4)
-            end
-            if not tutorialSkipped then
+        local function showStep(index)
+            if index > #tutorialSteps then
+                Tween(overlay, {BackgroundTransparency = 1}, 0.3)
+                Tween(bubble, {BackgroundTransparency = 1}, 0.3)
+                highlight.Visible = false
+                bubble.Visible = false
+                task.delay(0.3, function()
+                    overlay:Destroy()
+                    highlight:Destroy()
+                    bubble:Destroy()
+                end)
                 SetTutorialDone(true)
-                Window:Notify({Title = "Done!", Content = "Tutorial complete! Enjoy the menu.", Duration = 3, Type = "Success"})
+                tutorialActive = false
+                Window:Notify({Title = "Tutorial Complete!", Content = "You're all set! Enjoy the menu.", Duration = 4, Type = "Success"})
+                return
             end
+            
+            local step = tutorialSteps[index]
+            local target = step.Target
+            
+            if not target or not target.Parent then
+                showStep(index + 1)
+                return
+            end
+            
+            stepComplete = false
+            
+            bubbleTitle.Text = step.Title or ("Step " .. index)
+            bubbleText.Text = step.Text or ""
+            
+            local targetPos = target.AbsolutePosition
+            local targetSize = target.AbsoluteSize
+            
+            highlight.Position = UDim2.new(0, targetPos.X - 4, 0, targetPos.Y - 4)
+            highlight.Size = UDim2.new(0, targetSize.X + 8, 0, targetSize.Y + 8)
+            highlight.Visible = true
+            
+            Tween(highlightStroke, {Color = Theme.Accent}, 0.3)
+            task.spawn(function()
+                while not stepComplete and highlight and highlight.Parent do
+                    Tween(highlightStroke, {Color = Theme.Warning}, 0.5)
+                    task.wait(0.5)
+                    if stepComplete then break end
+                    Tween(highlightStroke, {Color = Theme.Accent}, 0.5)
+                    task.wait(0.5)
+                end
+            end)
+            
+            local bubbleX, bubbleY
+            if step.Position == "right" then
+                bubbleX = targetPos.X + targetSize.X + 15
+                bubbleY = targetPos.Y
+            elseif step.Position == "left" then
+                bubbleX = targetPos.X - 295
+                bubbleY = targetPos.Y
+            elseif step.Position == "bottom" then
+                bubbleX = targetPos.X
+                bubbleY = targetPos.Y + targetSize.Y + 15
+            else
+                bubbleX = targetPos.X + targetSize.X + 15
+                bubbleY = targetPos.Y
+            end
+            
+            bubble.Position = UDim2.new(0, bubbleX, 0, bubbleY)
+            bubble.Visible = true
+            bubble.BackgroundTransparency = 1
+            Tween(bubble, {BackgroundTransparency = 0}, 0.3)
+        end
+        
+        local function nextStep()
+            if stepComplete then return end
+            stepComplete = true
+            stepIndex = stepIndex + 1
+            showStep(stepIndex)
+        end
+        
+        skipBtn.MouseButton1Click:Connect(function()
+            tutorialSkipped = true
+            stepComplete = true
+            Tween(overlay, {BackgroundTransparency = 1}, 0.3)
+            Tween(bubble, {BackgroundTransparency = 1}, 0.3)
+            highlight.Visible = false
+            task.delay(0.3, function()
+                if overlay then overlay:Destroy() end
+                if highlight then highlight:Destroy() end
+                if bubble then bubble:Destroy() end
+            end)
+            SetTutorialDone(true)
             tutorialActive = false
+            Window:Notify({Title = "Skipped", Content = "Tutorial skipped! Restart anytime from settings.", Duration = 3, Type = "Info"})
         end)
+        
+        overlay.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local mouse = UserInputService:GetMouseLocation()
+                local targetPos = highlight.AbsolutePosition
+                local targetSize = highlight.AbsoluteSize
+                
+                if mouse.X >= targetPos.X and mouse.X <= targetPos.X + targetSize.X and
+                   mouse.Y >= targetPos.Y and mouse.Y <= targetPos.Y + targetSize.Y then
+                    nextStep()
+                end
+            end
+        end)
+        
+        for _, step in ipairs(tutorialSteps) do
+            if step.Target and step.Target:IsA("GuiButton") then
+                step.Target.MouseButton1Click:Connect(function()
+                    if tutorialActive and tutorialSteps[stepIndex] and tutorialSteps[stepIndex].Target == step.Target then
+                        nextStep()
+                    end
+                end)
+            end
+        end
+        
+        Tween(overlay, {BackgroundTransparency = 0.7}, 0.3)
+        stepIndex = 1
+        showStep(1)
     end
     
     function Window:ResetTutorial()
