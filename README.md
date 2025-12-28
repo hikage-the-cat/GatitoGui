@@ -59,7 +59,7 @@ Gatito:CreateWindow({
 
 **Discord Reminder**: Every 5 minutes shows clickable notification to join Discord.
 
-**Tutorial**: Shows on first run, saves completion. Click notifications to skip.
+**Tutorial**: Interactive tutorial with highlights. Click highlighted elements to proceed. Skip button available.
 
 ## Config System
 
