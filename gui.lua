@@ -156,6 +156,29 @@ function Gatito:CreateWindow(cfg)
         end
     end
     
+    local executionsPath = configFolder .. "/" .. configName .. "_executions.txt"
+    local executionCount = 0
+    
+    local function GetExecutions()
+        EnsureFolder()
+        if isfile and isfile(executionsPath) then
+            local count = tonumber(readfile(executionsPath))
+            return count or 0
+        end
+        return 0
+    end
+    
+    local function IncrementExecutions()
+        EnsureFolder()
+        executionCount = GetExecutions() + 1
+        if writefile then
+            writefile(executionsPath, tostring(executionCount))
+        end
+        return executionCount
+    end
+    
+    executionCount = IncrementExecutions()
+    
     local tutorialActive = false
     local tutorialSkipped = false
     
@@ -304,7 +327,83 @@ function Gatito:CreateWindow(cfg)
         
         Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,10,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "🔍", TextSize = 14, TextColor3 = Theme.TextDim, Parent = searchFrame})
         
-        Create("TextBox", {BackgroundTransparency = 1, Position = UDim2.new(0,35,0,0), Size = UDim2.new(1,-45,1,0), Font = Enum.Font.Gotham, PlaceholderText = "Search...", PlaceholderColor3 = Theme.TextMuted, Text = "", TextColor3 = Theme.Text, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Parent = searchFrame})
+        local searchBox = Create("TextBox", {BackgroundTransparency = 1, Position = UDim2.new(0,35,0,0), Size = UDim2.new(1,-45,1,0), Font = Enum.Font.Gotham, PlaceholderText = "Search...", PlaceholderColor3 = Theme.TextMuted, Text = "", TextColor3 = Theme.Text, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Parent = searchFrame})
+        
+        local searchResults = Create("Frame", {Name = "SearchResults", BackgroundColor3 = Theme.Card, Position = UDim2.new(0,0,1,5), Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, ClipsDescendants = true, Visible = false, ZIndex = 50, Parent = searchFrame})
+        Corner(searchResults, 8)
+        Padding(searchResults, 5)
+        local searchResultsLayout = Create("UIListLayout", {Padding = UDim.new(0,2), Parent = searchResults})
+        
+        local function DoSearch(query)
+            for _, child in pairs(searchResults:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+            
+            if query == "" then
+                searchResults.Visible = false
+                return
+            end
+            
+            local results = {}
+            query = query:lower()
+            
+            for tabName, tabData in pairs(Window.Tabs) do
+                if tabName:lower():find(query) then
+                    table.insert(results, {type = "tab", name = tabName, tab = tabData})
+                end
+                
+                if tabData.Page then
+                    for _, element in pairs(tabData.Page:GetChildren()) do
+                        if element:IsA("Frame") or element:IsA("TextButton") then
+                            for _, desc in pairs(element:GetDescendants()) do
+                                if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
+                                    if desc.Text:lower():find(query) and desc.Text ~= "" and #desc.Text < 50 then
+                                        table.insert(results, {type = "element", name = desc.Text, tab = tabData, tabName = tabName})
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            if #results == 0 then
+                searchResults.Visible = false
+                return
+            end
+            
+            searchResults.Visible = true
+            
+            for i, result in ipairs(results) do
+                if i > 8 then break end
+                local btn = Create("TextButton", {BackgroundColor3 = Theme.Divider, BackgroundTransparency = 1, Size = UDim2.new(1,0,0,28), Text = "", AutoButtonColor = false, ZIndex = 51, Parent = searchResults})
+                Corner(btn, 4)
+                
+                local icon = result.type == "tab" and "📁" or "📄"
+                Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,8,0,0), Size = UDim2.new(1,-16,1,0), Font = Enum.Font.Gotham, Text = icon .. " " .. result.name, TextSize = 12, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 51, Parent = btn})
+                
+                btn.MouseEnter:Connect(function() Tween(btn, {BackgroundTransparency = 0}, 0.1) end)
+                btn.MouseLeave:Connect(function() Tween(btn, {BackgroundTransparency = 1}, 0.1) end)
+                btn.MouseButton1Click:Connect(function()
+                    searchBox.Text = ""
+                    searchResults.Visible = false
+                    if result.tab and result.tab.Button then
+                        result.tab.Button.MouseButton1Click:Fire()
+                    end
+                end)
+            end
+        end
+        
+        searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+            DoSearch(searchBox.Text)
+        end)
+        
+        searchBox.FocusLost:Connect(function()
+            task.delay(0.2, function()
+                searchResults.Visible = false
+            end)
+        end)
         
         local greeting = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,70), Parent = homePage})
         
@@ -324,7 +423,7 @@ function Gatito:CreateWindow(cfg)
             end
             
             InfoItem("Access", info.Access or "Free", Theme.Accent)
-            InfoItem("Executions", tostring(info.Executions or 0), Theme.Text)
+            InfoItem("Executions", tostring(executionCount), Theme.Text)
             InfoItem("Expires", info.Expires or "Never", Theme.Success)
         end
         
@@ -408,10 +507,109 @@ function Gatito:CreateWindow(cfg)
                 Create("UIListLayout", {Padding = UDim.new(0,8), Parent = card})
                 
                 if widget.Title then
-                    Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,20), Font = Enum.Font.GothamBold, Text = widget.Title, TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = card})
+                    local headerFrame = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Parent = card})
+                    if widget.Icon then
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0,24,1,0), Font = Enum.Font.GothamBold, Text = widget.Icon, TextSize = 16, Parent = headerFrame})
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,28,0,0), Size = UDim2.new(1,-28,1,0), Font = Enum.Font.GothamBold, Text = widget.Title, TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = headerFrame})
+                    else
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0), Font = Enum.Font.GothamBold, Text = widget.Title, TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = headerFrame})
+                    end
                 end
-                if widget.Content then
-                    Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Font = Enum.Font.Gotham, Text = widget.Content, TextSize = 12, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, Parent = card})
+                
+                if widget.Type == "Text" or widget.Content then
+                    Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Font = Enum.Font.Gotham, Text = widget.Content or "", TextSize = 12, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, Parent = card})
+                end
+                
+                if widget.Type == "Stats" and widget.Stats then
+                    local statsFrame = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Parent = card})
+                    Create("UIGridLayout", {CellSize = UDim2.new(0.5,-5,0,35), CellPadding = UDim2.new(0,10,0,5), Parent = statsFrame})
+                    for _, stat in ipairs(widget.Stats) do
+                        local statItem = Create("Frame", {BackgroundColor3 = Theme.Divider, Size = UDim2.new(0,0,0,35), Parent = statsFrame})
+                        Corner(statItem, 6)
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,10,0,4), Size = UDim2.new(1,-20,0,12), Font = Enum.Font.Gotham, Text = stat.Label, TextSize = 10, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = statItem})
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,10,0,16), Size = UDim2.new(1,-20,0,16), Font = Enum.Font.GothamBold, Text = stat.Value, TextSize = 14, TextColor3 = stat.Color or Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = statItem})
+                    end
+                end
+                
+                if widget.Type == "Buttons" and widget.Buttons then
+                    local btnFrame = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Parent = card})
+                    Create("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0,8), Parent = btnFrame})
+                    for _, btnData in ipairs(widget.Buttons) do
+                        local btn = Create("TextButton", {BackgroundColor3 = btnData.Color or Theme.Accent, Size = UDim2.new(0,0,0,32), AutomaticSize = Enum.AutomaticSize.X, Font = Enum.Font.GothamMedium, Text = "  " .. btnData.Name .. "  ", TextSize = 12, TextColor3 = Theme.Text, AutoButtonColor = false, Parent = btnFrame})
+                        Corner(btn, 6)
+                        btn.MouseEnter:Connect(function() Tween(btn, {BackgroundTransparency = 0.2}, 0.15) end)
+                        btn.MouseLeave:Connect(function() Tween(btn, {BackgroundTransparency = 0}, 0.15) end)
+                        btn.MouseButton1Click:Connect(function()
+                            if btnData.Callback then btnData.Callback() end
+                            if btnData.Link then
+                                if setclipboard then setclipboard(btnData.Link) end
+                                Window:Notify({Title = "Copied", Content = "Link copied to clipboard!", Duration = 2, Type = "Success"})
+                            end
+                        end)
+                    end
+                end
+                
+                if widget.Type == "Links" and widget.Links then
+                    for _, link in ipairs(widget.Links) do
+                        local linkBtn = Create("TextButton", {BackgroundColor3 = Theme.Divider, Size = UDim2.new(1,0,0,36), Text = "", AutoButtonColor = false, Parent = card})
+                        Corner(linkBtn, 6)
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,12,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = link.Icon or "🔗", TextSize = 14, Parent = linkBtn})
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,38,0,0), Size = UDim2.new(1,-50,1,0), Font = Enum.Font.GothamMedium, Text = link.Name, TextSize = 13, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = linkBtn})
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(1,-30,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "→", TextSize = 14, TextColor3 = Theme.Accent, Parent = linkBtn})
+                        linkBtn.MouseEnter:Connect(function() Tween(linkBtn, {BackgroundColor3 = Theme.CardHover}, 0.15) end)
+                        linkBtn.MouseLeave:Connect(function() Tween(linkBtn, {BackgroundColor3 = Theme.Divider}, 0.15) end)
+                        linkBtn.MouseButton1Click:Connect(function()
+                            if link.Callback then link.Callback() end
+                            if link.Link then
+                                if setclipboard then setclipboard(link.Link) end
+                                Window:Notify({Title = "Copied", Content = link.Name .. " link copied!", Duration = 2, Type = "Success"})
+                            end
+                        end)
+                    end
+                end
+                
+                if widget.Type == "Credits" and widget.Credits then
+                    for _, credit in ipairs(widget.Credits) do
+                        local creditItem = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,20), Parent = card})
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0.4,0,1,0), Font = Enum.Font.GothamMedium, Text = credit.Role or "Developer", TextSize = 12, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = creditItem})
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0.4,0,0,0), Size = UDim2.new(0.6,0,1,0), Font = Enum.Font.GothamBold, Text = credit.Name, TextSize = 12, TextColor3 = credit.Color or Theme.Accent, TextXAlignment = Enum.TextXAlignment.Left, Parent = creditItem})
+                    end
+                end
+                
+                if widget.Type == "Progress" and widget.Progress then
+                    for _, prog in ipairs(widget.Progress) do
+                        local progFrame = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,30), Parent = card})
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,14), Font = Enum.Font.GothamMedium, Text = prog.Label, TextSize = 11, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = progFrame})
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,14), Font = Enum.Font.GothamBold, Text = tostring(prog.Value) .. "%", TextSize = 11, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Right, Parent = progFrame})
+                        local barBg = Create("Frame", {BackgroundColor3 = Theme.Divider, Position = UDim2.new(0,0,0,18), Size = UDim2.new(1,0,0,8), Parent = progFrame})
+                        Corner(barBg, 4)
+                        local barFill = Create("Frame", {BackgroundColor3 = prog.Color or Theme.Accent, Size = UDim2.new(math.clamp(prog.Value/100, 0, 1),0,1,0), Parent = barBg})
+                        Corner(barFill, 4)
+                    end
+                end
+                
+                if widget.Type == "Server" then
+                    local serverInfo = {
+                        {Label = "Game", Value = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown"},
+                        {Label = "Server Age", Value = math.floor(workspace.DistributedGameTime / 60) .. " min"},
+                        {Label = "Players", Value = #Players:GetPlayers() .. "/" .. Players.MaxPlayers},
+                        {Label = "Place ID", Value = tostring(game.PlaceId)}
+                    }
+                    for _, info in ipairs(serverInfo) do
+                        local infoItem = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,18), Parent = card})
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0.4,0,1,0), Font = Enum.Font.Gotham, Text = info.Label, TextSize = 12, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = infoItem})
+                        Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0.4,0,0,0), Size = UDim2.new(0.6,0,1,0), Font = Enum.Font.GothamMedium, Text = info.Value, TextSize = 12, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = infoItem})
+                    end
+                end
+                
+                if widget.Type == "Keybinds" and widget.Keybinds then
+                    for _, kb in ipairs(widget.Keybinds) do
+                        local kbItem = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Parent = card})
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,-60,1,0), Font = Enum.Font.Gotham, Text = kb.Action, TextSize = 12, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Parent = kbItem})
+                        local keyBox = Create("Frame", {BackgroundColor3 = Theme.Divider, Position = UDim2.new(1,-50,0.5,0), AnchorPoint = Vector2.new(0,0.5), Size = UDim2.new(0,50,0,20), Parent = kbItem})
+                        Corner(keyBox, 4)
+                        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0), Font = Enum.Font.GothamBold, Text = kb.Key, TextSize = 10, TextColor3 = Theme.Accent, Parent = keyBox})
+                    end
                 end
             end
         end
