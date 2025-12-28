@@ -76,6 +76,11 @@ function Gatito:CreateWindow(cfg)
     local configName = cfg.ConfigName or title:gsub("%s+", "") .. "_config"
     local autoSave = cfg.AutoSave ~= false
     local configFolder = cfg.ConfigFolder or "GatitoConfigs"
+    local logoIcon = cfg.Icon or "🐱"
+    local discordLink = "https://discord.gg/UnC2N29mjq"
+    local showTutorial = cfg.Tutorial ~= false
+    local tutorialTips = cfg.TutorialTips or {}
+    local tutorialConfigKey = configName .. "_tutorial_done"
     
     if CoreGui:FindFirstChild("GatitoLib") then
         CoreGui:FindFirstChild("GatitoLib"):Destroy()
@@ -134,6 +139,26 @@ function Gatito:CreateWindow(cfg)
         return false
     end
     
+    local function IsTutorialDone()
+        EnsureFolder()
+        local path = configFolder .. "/" .. tutorialConfigKey .. ".txt"
+        if isfile and isfile(path) then
+            return readfile(path) == "done"
+        end
+        return false
+    end
+    
+    local function SetTutorialDone(done)
+        EnsureFolder()
+        local path = configFolder .. "/" .. tutorialConfigKey .. ".txt"
+        if writefile then
+            writefile(path, done and "done" or "")
+        end
+    end
+    
+    local tutorialActive = false
+    local tutorialSkipped = false
+    
     local Splash
     if showSplash then
         Splash = Create("Frame", {Name = "Splash", BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0, 300, 0, 180), Parent = Gui})
@@ -184,7 +209,7 @@ function Gatito:CreateWindow(cfg)
     
     Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(0,55,0,10), Position = UDim2.new(0,0,1,-10), Parent = Main})
     
-    local Logo = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,0,0,12), Size = UDim2.new(1,0,0,30), Font = Enum.Font.GothamBold, Text = "🐱", TextSize = 22, TextColor3 = Theme.Accent, Parent = Sidebar})
+    local Logo = Create("TextButton", {BackgroundTransparency = 1, Position = UDim2.new(0,0,0,8), Size = UDim2.new(1,0,0,38), Font = Enum.Font.GothamBold, Text = logoIcon, TextSize = 22, TextColor3 = Theme.Accent, AutoButtonColor = false, Parent = Sidebar})
     
     local NavScroll = Create("ScrollingFrame", {Name = "NavScroll", BackgroundTransparency = 1, Position = UDim2.new(0,0,0,55), Size = UDim2.new(1,0,1,-55), CanvasSize = UDim2.new(0,0,0,0), ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.Y, Parent = Sidebar})
     Padding(NavScroll, 8)
@@ -201,9 +226,7 @@ function Gatito:CreateWindow(cfg)
     local isDragging = false
     local dragStart, startPos
     
-    local TitleBar = Create("Frame", {Name = "TitleBar", BackgroundTransparency = 1, Size = UDim2.new(1,0,0,45), Parent = Main})
-    
-    TitleBar.InputBegan:Connect(function(input)
+    Logo.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             isDragging = true
             dragStart = input.Position
@@ -211,7 +234,7 @@ function Gatito:CreateWindow(cfg)
         end
     end)
     
-    TitleBar.InputEnded:Connect(function(input)
+    Logo.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             isDragging = false
         end
@@ -438,10 +461,124 @@ function Gatito:CreateWindow(cfg)
             
             task.wait(0.5)
             LoadConfig()
+            
+            if showTutorial and not IsTutorialDone() then
+                Window:RunTutorial()
+            end
+            
+            task.spawn(function()
+                while Gui and Gui.Parent do
+                    task.wait(300)
+                    print("[Gatito] Enjoying the menu? Join our Discord: " .. discordLink)
+                    Window:DiscordNotify()
+                end
+            end)
         end)
     else
         task.delay(0.5, function()
             LoadConfig()
+            
+            if showTutorial and not IsTutorialDone() then
+                Window:RunTutorial()
+            end
+            
+            task.spawn(function()
+                while Gui and Gui.Parent do
+                    task.wait(300)
+                    print("[Gatito] Enjoying the menu? Join our Discord: " .. discordLink)
+                    Window:DiscordNotify()
+                end
+            end)
+        end)
+    end
+    
+    function Window:RunTutorial()
+        if tutorialActive then return end
+        tutorialActive = true
+        tutorialSkipped = false
+        
+        local tips = {
+            {Title = "Welcome!", Content = tutorialTips.Welcome or "Welcome to " .. title .. "! Here's a quick guide."},
+            {Title = "Navigation", Content = tutorialTips.Tabs or "Look at the left sidebar for tabs. Click icons to switch between them."},
+            {Title = "Drag Menu", Content = tutorialTips.Drag or "Click and drag the top-left icon (" .. logoIcon .. ") to move this window."},
+            {Title = "Settings", Content = tutorialTips.Settings or "Your settings auto-save! They'll be restored next time."}
+        }
+        if tutorialTips.Keybind then
+            table.insert(tips, {Title = "Keybind", Content = tutorialTips.Keybind})
+        end
+        if tutorialTips.Custom then
+            for _, tip in ipairs(tutorialTips.Custom) do
+                table.insert(tips, tip)
+            end
+        end
+        
+        Window:Notify({Title = "Tutorial", Content = "Starting tutorial... Click here to skip!", Duration = 3, Type = "Info", OnClick = function()
+            tutorialSkipped = true
+            SetTutorialDone(true)
+            Window:Notify({Title = "Skipped", Content = "Tutorial skipped! You can restart it anytime.", Duration = 2, Type = "Success"})
+        end})
+        
+        task.spawn(function()
+            task.wait(3)
+            for i, tip in ipairs(tips) do
+                if tutorialSkipped then break end
+                Window:Notify({Title = "Tip " .. i .. "/" .. #tips, Content = tip.Content, Duration = 4, Type = "Info", OnClick = function()
+                    tutorialSkipped = true
+                    SetTutorialDone(true)
+                    Window:Notify({Title = "Skipped", Content = "Tutorial skipped!", Duration = 2, Type = "Success"})
+                end})
+                task.wait(4)
+            end
+            if not tutorialSkipped then
+                SetTutorialDone(true)
+                Window:Notify({Title = "Done!", Content = "Tutorial complete! Enjoy the menu.", Duration = 3, Type = "Success"})
+            end
+            tutorialActive = false
+        end)
+    end
+    
+    function Window:ResetTutorial()
+        SetTutorialDone(false)
+        Window:Notify({Title = "Tutorial Reset", Content = "Tutorial will show on next load, or click Restart Tutorial.", Duration = 3, Type = "Info"})
+    end
+    
+    function Window:DiscordNotify()
+        local holder = Gui:FindFirstChild("Notifs") or Create("Frame", {Name = "Notifs", BackgroundTransparency = 1, Position = UDim2.new(1,-20,1,-20), AnchorPoint = Vector2.new(1,1), Size = UDim2.new(0,280,1,-40), Parent = Gui})
+        if not holder:FindFirstChild("UIListLayout") then Create("UIListLayout", {VerticalAlignment = Enum.VerticalAlignment.Bottom, Padding = UDim.new(0,8), Parent = holder}) end
+        
+        local notif = Create("TextButton", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = holder})
+        Corner(notif, 8)
+        Create("Frame", {BackgroundColor3 = Theme.Success, Size = UDim2.new(0,4,1,0), Parent = notif})
+        
+        local content = Create("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(1,-20,0,0), AutomaticSize = Enum.AutomaticSize.Y, Parent = notif})
+        Padding(content, 10)
+        Create("UIListLayout", {Padding = UDim.new(0,4), Parent = content})
+        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,16), Font = Enum.Font.GothamBold, Text = "🐱 Enjoying this menu?", TextSize = 13, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = content})
+        Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, Font = Enum.Font.Gotham, Text = "Click here to join our Discord!", TextSize = 12, TextColor3 = Theme.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, Parent = content})
+        
+        local prog = Create("Frame", {BackgroundColor3 = Theme.Success, Position = UDim2.new(0,0,1,-3), Size = UDim2.new(1,0,0,3), Parent = notif})
+        
+        notif.Position = UDim2.new(1,0,0,0)
+        notif.BackgroundTransparency = 1
+        Tween(notif, {Position = UDim2.new(0,0,0,0), BackgroundTransparency = 0}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        Tween(prog, {Size = UDim2.new(0,0,0,3)}, 8, Enum.EasingStyle.Linear)
+        
+        notif.MouseButton1Click:Connect(function()
+            if setclipboard then setclipboard(discordLink) end
+            if request then
+                pcall(function() request({Url = "http://127.0.0.1:6463/rpc?v=1", Method = "POST", Headers = {["Content-Type"] = "application/json", Origin = "https://discord.com"}, Body = HttpService:JSONEncode({cmd = "INVITE_BROWSER", args = {code = "UnC2N29mjq"}, nonce = HttpService:GenerateGUID(false)})}) end)
+            end
+            Window:Notify({Title = "Discord", Content = "Link copied! Opening Discord...", Duration = 3, Type = "Success"})
+            Tween(notif, {Position = UDim2.new(1,0,0,0), BackgroundTransparency = 1}, 0.3)
+            task.delay(0.35, function() notif:Destroy() end)
+        end)
+        
+        task.delay(8, function()
+            if notif and notif.Parent then
+                Tween(notif, {Position = UDim2.new(1,0,0,0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+                task.wait(0.35)
+                if notif then notif:Destroy() end
+            end
         end)
     end
     
@@ -756,6 +893,20 @@ function Gatito:CreateWindow(cfg)
             end)
         end
         
+        function Tab:TutorialButton(cfg)
+            cfg = cfg or {}
+            local btn = Create("TextButton", {BackgroundColor3 = Theme.Warning, Size = UDim2.new(1,0,0,42), Text = "", AutoButtonColor = false, Parent = page})
+            Corner(btn, 8)
+            Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,0), Size = UDim2.new(1,-50,1,0), Font = Enum.Font.GothamMedium, Text = cfg.Name or "Restart Tutorial", TextSize = 14, TextColor3 = Theme.Background, TextXAlignment = Enum.TextXAlignment.Left, Parent = btn})
+            Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(1,-35,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "📖", TextSize = 16, Parent = btn})
+            btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = Color3.fromRGB(240, 200, 70)}, 0.15) end)
+            btn.MouseLeave:Connect(function() Tween(btn, {BackgroundColor3 = Theme.Warning}, 0.15) end)
+            btn.MouseButton1Click:Connect(function()
+                Window:ResetTutorial()
+                Window:RunTutorial()
+            end)
+        end
+        
         return Tab
     end
     
@@ -770,11 +921,12 @@ function Gatito:CreateWindow(cfg)
     function Window:Notify(cfg)
         cfg = cfg or {}
         local color = cfg.Type == "Success" and Theme.Success or cfg.Type == "Warning" and Theme.Warning or cfg.Type == "Error" and Theme.Error or Theme.Accent
+        local onClick = cfg.OnClick
         
         local holder = Gui:FindFirstChild("Notifs") or Create("Frame", {Name = "Notifs", BackgroundTransparency = 1, Position = UDim2.new(1,-20,1,-20), AnchorPoint = Vector2.new(1,1), Size = UDim2.new(0,280,1,-40), Parent = Gui})
         if not holder:FindFirstChild("UIListLayout") then Create("UIListLayout", {VerticalAlignment = Enum.VerticalAlignment.Bottom, Padding = UDim.new(0,8), Parent = holder}) end
         
-        local notif = Create("Frame", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, ClipsDescendants = true, Parent = holder})
+        local notif = Create("TextButton", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,0), AutomaticSize = Enum.AutomaticSize.Y, ClipsDescendants = true, Text = "", AutoButtonColor = false, Parent = holder})
         Corner(notif, 8)
         Create("Frame", {BackgroundColor3 = color, Size = UDim2.new(0,4,1,0), Parent = notif})
         
@@ -791,10 +943,18 @@ function Gatito:CreateWindow(cfg)
         Tween(notif, {Position = UDim2.new(0,0,0,0), BackgroundTransparency = 0}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
         Tween(prog, {Size = UDim2.new(0,0,0,3)}, cfg.Duration or 5, Enum.EasingStyle.Linear)
         
+        notif.MouseButton1Click:Connect(function()
+            if onClick then onClick() end
+            Tween(notif, {Position = UDim2.new(1,0,0,0), BackgroundTransparency = 1}, 0.3)
+            task.delay(0.35, function() if notif then notif:Destroy() end end)
+        end)
+        
         task.delay(cfg.Duration or 5, function()
-            Tween(notif, {Position = UDim2.new(1,0,0,0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-            task.wait(0.35)
-            notif:Destroy()
+            if notif and notif.Parent then
+                Tween(notif, {Position = UDim2.new(1,0,0,0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+                task.wait(0.35)
+                if notif then notif:Destroy() end
+            end
         end)
     end
     
