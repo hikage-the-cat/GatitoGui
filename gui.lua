@@ -12,14 +12,13 @@
 --
 -- Any violation terminates this permission immediately.
 
-
-
 local Gatito = {}
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
 local Player = Players.LocalPlayer
 
@@ -46,8 +45,10 @@ local function Create(class, props, children)
     return inst
 end
 
-local function Tween(inst, props, dur)
-    TweenService:Create(inst, TweenInfo.new(dur or 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
+local function Tween(inst, props, dur, style, dir)
+    local tween = TweenService:Create(inst, TweenInfo.new(dur or 0.2, style or Enum.EasingStyle.Quart, dir or Enum.EasingDirection.Out), props)
+    tween:Play()
+    return tween
 end
 
 local function Corner(inst, r)
@@ -70,6 +71,8 @@ function Gatito:CreateWindow(cfg)
     local showHome = cfg.ShowHome ~= false
     local homeConfig = cfg.Home or {}
     local size = cfg.Size or UDim2.new(0, 680, 0, 440)
+    local showSplash = cfg.Splash ~= false
+    local splashDuration = cfg.SplashDuration or 2
     
     if CoreGui:FindFirstChild("GatitoLib") then
         CoreGui:FindFirstChild("GatitoLib"):Destroy()
@@ -77,45 +80,98 @@ function Gatito:CreateWindow(cfg)
     
     local Gui = Create("ScreenGui", {Name = "GatitoLib", Parent = CoreGui, ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling})
     
-    local Main = Create("Frame", {Name = "Main", BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = size, ClipsDescendants = true, Parent = Gui})
+    local Splash
+    if showSplash then
+        Splash = Create("Frame", {Name = "Splash", BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0, 300, 0, 180), Parent = Gui})
+        Corner(Splash, 12)
+        Stroke(Splash, Theme.Accent, 2)
+        
+        local SplashLogo = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0.5,0,0,30), AnchorPoint = Vector2.new(0.5,0), Size = UDim2.new(0,60,0,60), Font = Enum.Font.GothamBold, Text = "🐱", TextSize = 48, Parent = Splash})
+        
+        local SplashTitle = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0.5,0,0,95), AnchorPoint = Vector2.new(0.5,0), Size = UDim2.new(1,0,0,25), Font = Enum.Font.GothamBold, Text = title, TextSize = 20, TextColor3 = Theme.Text, Parent = Splash})
+        
+        local SplashSub = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0.5,0,0,118), AnchorPoint = Vector2.new(0.5,0), Size = UDim2.new(1,0,0,16), Font = Enum.Font.Gotham, Text = "Loading...", TextSize = 12, TextColor3 = Theme.TextDim, Parent = Splash})
+        
+        local ProgressBg = Create("Frame", {BackgroundColor3 = Theme.Divider, Position = UDim2.new(0.5,0,1,-30), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0.7,0,0,6), Parent = Splash})
+        Corner(ProgressBg, 3)
+        
+        local ProgressFill = Create("Frame", {BackgroundColor3 = Theme.Accent, Size = UDim2.new(0,0,1,0), Parent = ProgressBg})
+        Corner(ProgressFill, 3)
+        
+        Splash.BackgroundTransparency = 1
+        Splash.Size = UDim2.new(0, 280, 0, 160)
+        SplashLogo.TextTransparency = 1
+        SplashTitle.TextTransparency = 1
+        SplashSub.TextTransparency = 1
+        ProgressBg.BackgroundTransparency = 1
+        ProgressFill.BackgroundTransparency = 1
+        
+        Tween(Splash, {BackgroundTransparency = 0, Size = UDim2.new(0, 300, 0, 180)}, 0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        Tween(SplashLogo, {TextTransparency = 0}, 0.3)
+        task.delay(0.1, function() Tween(SplashTitle, {TextTransparency = 0}, 0.3) end)
+        task.delay(0.2, function() Tween(SplashSub, {TextTransparency = 0}, 0.3) end)
+        task.delay(0.3, function() 
+            Tween(ProgressBg, {BackgroundTransparency = 0}, 0.2)
+            Tween(ProgressFill, {BackgroundTransparency = 0}, 0.2)
+            Tween(ProgressFill, {Size = UDim2.new(1,0,1,0)}, splashDuration - 0.5, Enum.EasingStyle.Linear)
+        end)
+    end
+    
+    local Main = Create("Frame", {Name = "Main", BackgroundColor3 = Theme.Background, Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = size, ClipsDescendants = true, Visible = not showSplash, Parent = Gui})
     Corner(Main, 10)
     Stroke(Main, Theme.Accent, 1)
     
+    if showSplash then
+        Main.Size = UDim2.new(0, 0, 0, 0)
+        Main.BackgroundTransparency = 1
+    end
+    
     local Sidebar = Create("Frame", {Name = "Sidebar", BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(0,55,1,0), Parent = Main})
     
-    local SidebarBottom = Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(0,55,0,10), Position = UDim2.new(0,0,1,-10), Parent = Main})
+    Create("Frame", {BackgroundColor3 = Theme.Sidebar, Size = UDim2.new(0,55,0,10), Position = UDim2.new(0,0,1,-10), Parent = Main})
     
     local Logo = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,0,0,12), Size = UDim2.new(1,0,0,30), Font = Enum.Font.GothamBold, Text = "🐱", TextSize = 22, TextColor3 = Theme.Accent, Parent = Sidebar})
     
-    local NavHolder = Create("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0,0,0,55), Size = UDim2.new(1,0,1,-55), Parent = Sidebar})
-    Create("UIListLayout", {Padding = UDim.new(0,5), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = NavHolder})
-    Padding(NavHolder, 8)
+    local NavScroll = Create("ScrollingFrame", {Name = "NavScroll", BackgroundTransparency = 1, Position = UDim2.new(0,0,0,55), Size = UDim2.new(1,0,1,-55), CanvasSize = UDim2.new(0,0,0,0), ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.Y, Parent = Sidebar})
+    Padding(NavScroll, 8)
+    
+    local NavLayout = Create("UIListLayout", {Padding = UDim.new(0,5), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = NavScroll})
+    NavLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        NavScroll.CanvasSize = UDim2.new(0,0,0,NavLayout.AbsoluteContentSize.Y + 16)
+    end)
     
     local ContentArea = Create("Frame", {Name = "Content", BackgroundTransparency = 1, Position = UDim2.new(0,55,0,0), Size = UDim2.new(1,-55,1,0), ClipsDescendants = true, Parent = Main})
     
-    local Window = {Tabs = {}, Pages = {}, CurrentTab = nil, Theme = Theme, Gui = Gui, Frame = Main, HomeEnabled = showHome}
+    local Window = {Tabs = {}, Pages = {}, CurrentTab = nil, Theme = Theme, Gui = Gui, Frame = Main, HomeEnabled = showHome, SearchResults = {}}
     
-    local dragging, dragStart, startPos
-    Main.InputBegan:Connect(function(input)
+    local isDragging = false
+    local dragStart, startPos
+    
+    local TitleBar = Create("Frame", {Name = "TitleBar", BackgroundTransparency = 1, Size = UDim2.new(1,0,0,45), Parent = Main})
+    
+    TitleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
+            isDragging = true
             dragStart = input.Position
             startPos = Main.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
+        end
+    end)
+    
+    TitleBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
         end
     end)
     
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local delta = input.Position - dragStart
             Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
     
     local function CreateNavButton(name, icon, isHome)
-        local btn = Create("TextButton", {Name = name, BackgroundColor3 = Theme.Card, BackgroundTransparency = 1, Size = UDim2.new(0,40,0,40), Text = "", AutoButtonColor = false, Parent = NavHolder})
+        local btn = Create("TextButton", {Name = name, BackgroundColor3 = Theme.Card, BackgroundTransparency = 1, Size = UDim2.new(0,40,0,40), Text = "", AutoButtonColor = false, Parent = NavScroll})
         Corner(btn, 10)
         local ico = Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0), Font = Enum.Font.GothamBold, Text = icon, TextSize = 18, TextColor3 = Theme.TextDim, Parent = btn})
         
@@ -141,6 +197,9 @@ function Gatito:CreateWindow(cfg)
                 Tween(t.Button, {BackgroundTransparency = 0, BackgroundColor3 = Theme.Accent}, 0.15)
                 Tween(t.Icon, {TextColor3 = Theme.Text}, 0.15)
                 t.Page.Visible = true
+                t.Page.Position = UDim2.new(0.05, 0, 0, 0)
+                t.Page.BackgroundTransparency = 1
+                Tween(t.Page, {Position = UDim2.new(0,0,0,0)}, 0.25)
             else
                 Tween(t.Button, {BackgroundTransparency = 1, BackgroundColor3 = Theme.Card}, 0.15)
                 Tween(t.Icon, {TextColor3 = Theme.TextDim}, 0.15)
@@ -160,6 +219,15 @@ function Gatito:CreateWindow(cfg)
         homeLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
             homePage.CanvasSize = UDim2.new(0,0,0,homeLayout.AbsoluteContentSize.Y + 40)
         end)
+        
+        local topBar = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,40), Parent = homePage})
+        
+        local searchFrame = Create("Frame", {BackgroundColor3 = Theme.Card, Position = UDim2.new(1,-200,0,0), Size = UDim2.new(0,200,0,35), Parent = topBar})
+        Corner(searchFrame, 8)
+        
+        local searchIcon = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,10,0,0), Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "🔍", TextSize = 14, TextColor3 = Theme.TextDim, Parent = searchFrame})
+        
+        local searchBox = Create("TextBox", {BackgroundTransparency = 1, Position = UDim2.new(0,35,0,0), Size = UDim2.new(1,-45,1,0), Font = Enum.Font.Gotham, PlaceholderText = "Search...", PlaceholderColor3 = Theme.TextMuted, Text = "", TextColor3 = Theme.Text, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Parent = searchFrame})
         
         local greeting = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,70), Parent = homePage})
         
@@ -197,7 +265,7 @@ function Gatito:CreateWindow(cfg)
             Corner(updatesCard, 8)
             Padding(updatesCard, 15)
             
-            local updatesLayout = Create("UIListLayout", {Padding = UDim.new(0,10), Parent = updatesCard})
+            Create("UIListLayout", {Padding = UDim.new(0,10), Parent = updatesCard})
             
             local updatesHeader = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Parent = updatesCard})
             Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "🔄", TextSize = 16, Parent = updatesHeader})
@@ -208,7 +276,7 @@ function Gatito:CreateWindow(cfg)
                 Create("UIListLayout", {Padding = UDim.new(0,4), Parent = updateItem})
                 
                 if update.Title then
-                    local titleBtn = Create("TextButton", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,18), Font = Enum.Font.GothamMedium, Text = update.Title, TextSize = 13, TextColor3 = Theme.Accent, TextXAlignment = Enum.TextXAlignment.Left, Parent = updateItem})
+                    Create("TextButton", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,18), Font = Enum.Font.GothamMedium, Text = update.Title, TextSize = 13, TextColor3 = Theme.Accent, TextXAlignment = Enum.TextXAlignment.Left, Parent = updateItem})
                 end
                 
                 for _, line in ipairs(update.Changes or {}) do
@@ -223,7 +291,7 @@ function Gatito:CreateWindow(cfg)
             Corner(gamesCard, 8)
             Padding(gamesCard, 15)
             
-            local gamesLayout = Create("UIListLayout", {Padding = UDim.new(0,8), Parent = gamesCard})
+            Create("UIListLayout", {Padding = UDim.new(0,8), Parent = gamesCard})
             
             local gamesHeader = Create("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1,0,0,24), Parent = gamesCard})
             Create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0,20,1,0), Font = Enum.Font.GothamBold, Text = "🎮", TextSize = 16, Parent = gamesHeader})
@@ -250,7 +318,7 @@ function Gatito:CreateWindow(cfg)
                 Corner(dot, 4)
                 Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,16,0,0), Size = UDim2.new(1,-16,1,0), Font = Enum.Font.Gotham, Text = game.Name, TextSize = 12, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = gameItem})
                 if game.Tag then
-                    local tag = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(1,0,0,0), AnchorPoint = Vector2.new(1,0), Size = UDim2.new(0,0,1,0), AutomaticSize = Enum.AutomaticSize.X, Font = Enum.Font.GothamBold, Text = "[" .. game.Tag .. "]", TextSize = 10, TextColor3 = game.TagColor or Theme.Accent, Parent = gameItem})
+                    Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(1,0,0,0), AnchorPoint = Vector2.new(1,0), Size = UDim2.new(0,0,1,0), AutomaticSize = Enum.AutomaticSize.X, Font = Enum.Font.GothamBold, Text = "[" .. game.Tag .. "]", TextSize = 10, TextColor3 = game.TagColor or Theme.Accent, Parent = gameItem})
                 end
             end
         end
@@ -277,6 +345,67 @@ function Gatito:CreateWindow(cfg)
         Tween(homeIco, {TextColor3 = Theme.Text}, 0)
         
         homeBtn.MouseButton1Click:Connect(function() SelectTab("Home") end)
+        
+        searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+            local query = searchBox.Text:lower()
+            if query == "" then return end
+            
+            for _, tab in pairs(Window.Tabs) do
+                if tab.Page and tab.Page:FindFirstChild("UIListLayout") then
+                    for _, child in pairs(tab.Page:GetChildren()) do
+                        if child:IsA("Frame") or child:IsA("TextButton") then
+                            local found = false
+                            for _, desc in pairs(child:GetDescendants()) do
+                                if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+                                    if desc.Text and desc.Text:lower():find(query) then
+                                        found = true
+                                        break
+                                    end
+                                end
+                            end
+                            if child.Name and child.Name:lower():find(query) then found = true end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    
+    if showSplash then
+        task.delay(splashDuration, function()
+            Tween(Splash, {BackgroundTransparency = 1, Size = UDim2.new(0, 280, 0, 160)}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+            for _, child in pairs(Splash:GetDescendants()) do
+                if child:IsA("TextLabel") then Tween(child, {TextTransparency = 1}, 0.2) end
+                if child:IsA("Frame") then Tween(child, {BackgroundTransparency = 1}, 0.2) end
+            end
+            
+            task.wait(0.35)
+            Splash:Destroy()
+            
+            Main.Visible = true
+            Main.BackgroundTransparency = 1
+            Main.Size = UDim2.new(0, size.X.Offset - 50, 0, size.Y.Offset - 50)
+            
+            Tween(Main, {BackgroundTransparency = 0, Size = size}, 0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            
+            for _, child in pairs(Main:GetDescendants()) do
+                if child:IsA("Frame") and child.BackgroundTransparency < 1 then
+                    local orig = child.BackgroundTransparency
+                    child.BackgroundTransparency = 1
+                    Tween(child, {BackgroundTransparency = orig}, 0.3)
+                end
+                if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
+                    local orig = child.TextTransparency or 0
+                    child.TextTransparency = 1
+                    Tween(child, {TextTransparency = orig}, 0.3)
+                end
+                if child:IsA("ImageLabel") then
+                    local orig = child.ImageTransparency or 0
+                    child.ImageTransparency = 1
+                    Tween(child, {ImageTransparency = orig}, 0.3)
+                end
+            end
+        end)
     end
     
     function Window:CreateTab(cfg)
@@ -356,35 +485,58 @@ function Gatito:CreateWindow(cfg)
             cfg = cfg or {}
             local min, max, val = cfg.Min or 0, cfg.Max or 100, cfg.Default or cfg.Min or 0
             local inc = cfg.Increment or 1
+            local sliderDragging = false
             
             local frame = Create("Frame", {BackgroundColor3 = Theme.Card, Size = UDim2.new(1,0,0,55), Parent = page})
             Corner(frame, 8)
             Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0,15,0,8), Size = UDim2.new(0.6,0,0,18), Font = Enum.Font.GothamMedium, Text = cfg.Name or "Slider", TextSize = 14, TextColor3 = Theme.Text, TextXAlignment = Enum.TextXAlignment.Left, Parent = frame})
             local valLabel = Create("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(1,-55,0,8), Size = UDim2.new(0,40,0,18), Font = Enum.Font.GothamBold, Text = tostring(val), TextSize = 14, TextColor3 = Theme.Accent, TextXAlignment = Enum.TextXAlignment.Right, Parent = frame})
             
-            local bar = Create("Frame", {BackgroundColor3 = Theme.Divider, Position = UDim2.new(0,15,0,38), Size = UDim2.new(1,-30,0,8), Parent = frame})
+            local bar = Create("TextButton", {BackgroundColor3 = Theme.Divider, Position = UDim2.new(0,15,0,38), Size = UDim2.new(1,-30,0,8), Text = "", AutoButtonColor = false, Parent = frame})
             Corner(bar, 4)
             local fill = Create("Frame", {BackgroundColor3 = Theme.Accent, Size = UDim2.new((val-min)/(max-min),0,1,0), Parent = bar})
             Corner(fill, 4)
-            local knob = Create("Frame", {BackgroundColor3 = Theme.Text, Position = UDim2.new((val-min)/(max-min),0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0,16,0,16), Parent = bar})
+            local knob = Create("Frame", {BackgroundColor3 = Theme.Text, Position = UDim2.new((val-min)/(max-min),0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), Size = UDim2.new(0,16,0,16), ZIndex = 5, Parent = bar})
             Corner(knob, 8)
             
-            local dragging = false
-            bar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end end)
-            UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
-            UserInputService.InputChanged:Connect(function(i)
-                if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+            bar.InputBegan:Connect(function(i) 
+                if i.UserInputType == Enum.UserInputType.MouseButton1 then 
+                    sliderDragging = true
                     local p = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
                     val = math.floor((min + (max-min)*p)/inc+0.5)*inc
                     val = math.clamp(val, min, max)
                     valLabel.Text = tostring(inc >= 1 and math.floor(val) or val)
-                    Tween(fill, {Size = UDim2.new((val-min)/(max-min),0,1,0)}, 0.05)
-                    Tween(knob, {Position = UDim2.new((val-min)/(max-min),0,0.5,0)}, 0.05)
+                    fill.Size = UDim2.new((val-min)/(max-min),0,1,0)
+                    knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0)
+                    if cfg.Callback then cfg.Callback(val) end
+                end 
+            end)
+            
+            bar.InputEnded:Connect(function(i)
+                if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                    sliderDragging = false
+                end
+            end)
+            
+            UserInputService.InputChanged:Connect(function(i)
+                if sliderDragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+                    local p = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                    val = math.floor((min + (max-min)*p)/inc+0.5)*inc
+                    val = math.clamp(val, min, max)
+                    valLabel.Text = tostring(inc >= 1 and math.floor(val) or val)
+                    fill.Size = UDim2.new((val-min)/(max-min),0,1,0)
+                    knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0)
                     if cfg.Callback then cfg.Callback(val) end
                 end
             end)
             
-            return {Set = function(_,v) val = math.clamp(v,min,max) valLabel.Text = tostring(math.floor(val)) fill.Size = UDim2.new((val-min)/(max-min),0,1,0) knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0) if cfg.Callback then cfg.Callback(val) end end, Get = function() return val end}
+            UserInputService.InputEnded:Connect(function(i)
+                if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                    sliderDragging = false
+                end
+            end)
+            
+            return {Set = function(_,v) val = math.clamp(v,min,max) valLabel.Text = tostring(inc >= 1 and math.floor(val) or val) fill.Size = UDim2.new((val-min)/(max-min),0,1,0) knob.Position = UDim2.new((val-min)/(max-min),0,0.5,0) if cfg.Callback then cfg.Callback(val) end end, Get = function() return val end}
         end
         
         function Tab:Dropdown(cfg)
@@ -506,22 +658,38 @@ function Gatito:CreateWindow(cfg)
         local prog = Create("Frame", {BackgroundColor3 = color, Position = UDim2.new(0,0,1,-3), Size = UDim2.new(1,0,0,3), Parent = notif})
         
         notif.Position = UDim2.new(1,0,0,0)
-        Tween(notif, {Position = UDim2.new(0,0,0,0)}, 0.3)
-        Tween(prog, {Size = UDim2.new(0,0,0,3)}, cfg.Duration or 5)
+        notif.BackgroundTransparency = 1
+        Tween(notif, {Position = UDim2.new(0,0,0,0), BackgroundTransparency = 0}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        Tween(prog, {Size = UDim2.new(0,0,0,3)}, cfg.Duration or 5, Enum.EasingStyle.Linear)
         
         task.delay(cfg.Duration or 5, function()
-            Tween(notif, {Position = UDim2.new(1,0,0,0)}, 0.3)
+            Tween(notif, {Position = UDim2.new(1,0,0,0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
             task.wait(0.35)
             notif:Destroy()
         end)
     end
     
     function Window:Toggle(v)
-        Main.Visible = v == nil and not Main.Visible or v
+        if v == nil then v = not Main.Visible end
+        
+        if v then
+            Main.Visible = true
+            Main.Size = UDim2.new(0, size.X.Offset - 30, 0, size.Y.Offset - 30)
+            Main.BackgroundTransparency = 0.5
+            Tween(Main, {Size = size, BackgroundTransparency = 0}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        else
+            Tween(Main, {Size = UDim2.new(0, size.X.Offset - 30, 0, size.Y.Offset - 30), BackgroundTransparency = 0.5}, 0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+            task.delay(0.25, function()
+                Main.Visible = false
+            end)
+        end
     end
     
     function Window:Destroy()
-        Gui:Destroy()
+        Tween(Main, {Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        task.delay(0.35, function()
+            Gui:Destroy()
+        end)
     end
     
     return Window
