@@ -97,11 +97,89 @@ Home = {
     Avatar = true,
     Updates = {List = {{Title = "v1.0", Changes = {"Initial release"}}}},
     Games = {List = {{Name = "Game", Status = "working", Tag = "NEW"}}},
-    Widgets = {{Title = "Notice", Content = "Text here"}}
+    Widgets = { ... }
 }
 ```
 
 Disable widgets: `UserInfo = false`, `Avatar = false`, etc.
+
+### Widget Types
+
+**Text Widget** (default):
+```lua
+{Type = "Text", Title = "Notice", Icon = "📢", Content = "Text here"}
+```
+
+**Stats Widget** (key-value grid):
+```lua
+{
+    Type = "Stats", Title = "Stats", Icon = "📊",
+    Stats = {
+        {Label = "FPS", Value = "60", Color = Color3.fromRGB(100,255,100)},
+        {Label = "Ping", Value = "45ms"}
+    }
+}
+```
+
+**Buttons Widget** (inline buttons):
+```lua
+{
+    Type = "Buttons", Title = "Actions", Icon = "⚡",
+    Buttons = {
+        {Name = "Discord", Color = Color3.fromRGB(114,137,218), Link = "https://discord.gg/xxx"},
+        {Name = "Reset", Color = Color3.fromRGB(255,100,100), Callback = function() end}
+    }
+}
+```
+
+**Links Widget** (clickable list):
+```lua
+{
+    Type = "Links", Title = "Links", Icon = "🔗",
+    Links = {
+        {Name = "Discord", Icon = "💬", Link = "https://discord.gg/xxx"},
+        {Name = "Docs", Icon = "📖", Callback = function() end}
+    }
+}
+```
+
+**Credits Widget**:
+```lua
+{
+    Type = "Credits", Title = "Credits", Icon = "⭐",
+    Credits = {
+        {Role = "Developer", Name = "Username", Color = Color3.fromRGB(255,180,100)},
+        {Role = "UI Design", Name = "Someone"}
+    }
+}
+```
+
+**Progress Widget** (progress bars):
+```lua
+{
+    Type = "Progress", Title = "Progress", Icon = "📈",
+    Progress = {
+        {Label = "Features", Value = 100, Color = Color3.fromRGB(100,255,100)},
+        {Label = "Docs", Value = 60}
+    }
+}
+```
+
+**Server Widget** (auto-filled server info):
+```lua
+{Type = "Server", Title = "Server Info", Icon = "🌐"}
+```
+
+**Keybinds Widget** (keybind display):
+```lua
+{
+    Type = "Keybinds", Title = "Keybinds", Icon = "⌨️",
+    Keybinds = {
+        {Action = "Toggle Menu", Key = "RShift"},
+        {Action = "Fly", Key = "F"}
+    }
+}
+```
 
 ## Components
 
